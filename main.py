@@ -687,6 +687,81 @@ def get_courses(term: str):
     courses = list(db.courses.find({"term": term}))
     return convert_objectid_to_str(courses)
 
+
+# API endpoint to assign ticket to staff
+@app.put("/api/tickets/{ticket_id}/assign")
+def assign_ticket(ticket_id: str, staff_email: str):
+    try:
+        from bson import ObjectId
+
+        # Verify staff exists
+        staff = db.users.find_one({"email": staff_email, "role": "staff"})
+        if not staff:
+            raise HTTPException(
+                status_code=404, detail="Staff member not found")
+
+        # Update ticket
+        result = db.tickets.update_one(
+            {"_id": ObjectId(ticket_id)},
+            {
+                "$set": {
+                    "assigned_to": staff_email,
+                    "assigned_to_name": staff.get("full_name"),
+                    "status": "assigned",
+                    "assigned_at": datetime.now().isoformat()
+                }
+            }
+        )
+
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+
+        return {"message": "Ticket assigned successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# API endpoint to update ticket (status and/or assigned staff)
+
+
+@app.put("/api/tickets/{ticket_id}")
+async def update_ticket(ticket_id: str, request: Request):
+    try:
+        from bson import ObjectId
+
+        data = await request.json()
+        status = data.get("status")
+        assigned_staff = data.get("assigned_staff")
+
+        update_fields = {
+            "last_updated": datetime.now().isoformat()
+        }
+
+        if status:
+            update_fields["status"] = status
+
+        if assigned_staff and assigned_staff != "":
+            # Verify staff exists
+            staff = db.users.find_one(
+                {"email": assigned_staff, "role": "staff"})
+            if staff:
+                update_fields["assigned_staff"] = assigned_staff
+                update_fields["assigned_to_name"] = staff.get("full_name")
+                update_fields["assigned_at"] = datetime.now().isoformat()
+
+        # Update ticket
+        result = db.tickets.update_one(
+            {"_id": ObjectId(ticket_id)},
+            {"$set": update_fields}
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+
+        return {"message": "Ticket updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Helper function to convert ObjectId to string
 
 
@@ -737,6 +812,8 @@ def get_all_staff():
         raise HTTPException(status_code=500, detail=str(e))
 
 # API endpoint to get staff by department
+
+
 @app.get("/api/staff/department/{department}")
 def get_staff_by_department(department: str):
     try:
