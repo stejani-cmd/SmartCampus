@@ -745,3 +745,81 @@ async def add_knowledge_article(request: Request):
     except Exception as e:
         print(f"Error adding article: {e}")
         return JSONResponse({"error": "Internal server error."}, status_code=500)
+
+
+# ======================================================================================
+#                                  BOT ENDPOINT
+# ======================================================================================
+@app.post("/chat_question")
+async def chat_question(question: str = Form(...)):
+    from rag_pipeline import get_answer
+    answer, _ = get_answer(question)
+
+    chips, suggest_live_chat, fu_source = build_llm_style_followups(
+        user_question=question,
+        answer_text=answer or "",
+        k=4
+    )
+
+    if suggest_live_chat:
+        chips.append({"label": "Talk to an admin", "payload": {"type": "action", "action": "escalate"}})
+
+    resp = {
+        "answer": answer,
+        "suggest_live_chat": suggest_live_chat,
+        "suggested_followups": chips
+    }
+    if DEBUG_FOLLOWUPS:
+        resp["followup_generator"] = fu_source  # "openai" | "fallback" | "fallback_error"
+    return resp
+
+
+# Streaming version of chat_question
+@app.post("/chat_question_stream")
+async def chat_question_stream(question: str = Form(...)):
+    from rag_pipeline import get_answer_stream
+    
+    async def event_generator():
+        # Collect full answer for followup generation
+        full_answer = ""
+        
+        # Stream the answer chunks
+        for chunk in get_answer_stream(question):
+            full_answer += chunk
+            # Send each chunk as SSE (Server-Sent Events)
+            yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+        
+        # Generate followups after answer is complete
+        chips, suggest_live_chat, fu_source = build_llm_style_followups(
+            user_question=question,
+            answer_text=full_answer or "",
+            k=4
+        )
+        
+        if suggest_live_chat:
+            chips.append({"label": "Talk to an admin", "payload": {"type": "action", "action": "escalate"}})
+        
+        # Send followups
+        followup_data = {
+            "type": "followups",
+            "suggest_live_chat": suggest_live_chat,
+            "suggested_followups": chips
+        }
+        
+        if DEBUG_FOLLOWUPS:
+            followup_data["followup_generator"] = fu_source
+        
+        yield f"data: {json.dumps(followup_data)}\n\n"
+        
+        # Send done signal
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
