@@ -351,3 +351,5 @@ class ChatManager:
             except Exception:
                 # stale socket
                 pass
+
+manager = ChatManager()
