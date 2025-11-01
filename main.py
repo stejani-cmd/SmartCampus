@@ -21,6 +21,7 @@ from authlib.integrations.starlette_client import OAuth
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel, ValidationError
 import logging
+from app.utils import get_current_user
 
 from app.routers import auth, pages
 from app.core.config import settings
