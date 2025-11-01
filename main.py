@@ -1206,3 +1206,106 @@ async def chat_question_stream(question: str = Form(...)):
             "X-Accel-Buffering": "no"
         }
     )
+
+
+# ==================== DEPARTMENTS MANAGEMENT ====================
+
+# Get all departments
+@app.get("/api/departments")
+async def get_departments(status: str | None = None):
+    try:
+        query = {}
+        if status:
+            query["status"] = status
+        else:
+            query["status"] = "active"  # Default to active departments
+
+        departments = list(db.departments.find(query).sort("name", 1))
+        return convert_objectid_to_str(departments)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Get all students for user management
+
+
+@app.get("/api/students")
+async def get_all_students():
+    try:
+        students = list(db.users.find(
+            {"role": "student"},
+            {"password": 0}  # Exclude password from response
+        ).sort("full_name", 1))
+        return convert_objectid_to_str(students)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Get single department by ID
+
+
+@app.get("/api/departments/{department_id}")
+async def get_department(department_id: str):
+    try:
+        department = db.departments.find_one({"department_id": department_id})
+        if not department:
+            raise HTTPException(status_code=404, detail="Department not found")
+        return convert_objectid_to_str(department)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Create new department
+
+
+@app.post("/api/departments")
+async def create_department(request: Request):
+    try:
+        data = await request.json()
+
+        # Check if department_id already exists
+        existing = db.departments.find_one(
+            {"department_id": data.get("department_id")})
+        if existing:
+            raise HTTPException(
+                status_code=400, detail="Department ID already exists")
+
+        result = db.departments.insert_one(data)
+        return {"message": "Department created successfully", "id": str(result.inserted_id)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Update department
+
+
+@app.put("/api/departments/{department_id}")
+async def update_department(department_id: str, request: Request):
+    try:
+        data = await request.json()
+
+        result = db.departments.update_one(
+            {"department_id": department_id},
+            {"$set": data}
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Department not found")
+
+        return {"message": "Department updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Delete department (soft delete by setting status to inactive)
+
+
+@app.delete("/api/departments/{department_id}")
+async def delete_department(department_id: str):
+    try:
+        result = db.departments.update_one(
+            {"department_id": department_id},
+            {"$set": {"status": "inactive"}}
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Department not found")
+
+        return {"message": "Department deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
