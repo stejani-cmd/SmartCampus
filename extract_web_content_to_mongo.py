@@ -6,7 +6,7 @@ import re
 
 # ------------------ MongoDB setup ------------------
 client = MongoClient("mongodb+srv://Manny0715:Manmeet12345@cluster0.1pf6oxg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")  # replace with your MongoDB URL if needed
-db = client.smartassist
+db = client.SmartCampus
 kb_collection = db.knowledge_base  # collection for articles
 
 # Create unique index on URL to prevent duplicates

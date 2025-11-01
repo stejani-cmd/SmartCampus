@@ -10,10 +10,7 @@ class Settings:
     STATIC_DIR: str = "static"
 
     # mongo
-    MONGODB_URI: str = os.getenv(
-        "MONGODB_URI",
-        "mongodb+srv://Manny0715:Manmeet12345@cluster0.1pf6oxg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-    )
-    MONGODB_DB: str = os.getenv("MONGODB_DB", "SmartCampus")
+    MONGODB_URI: str = "mongodb+srv://Manny0715:Manmeet12345@cluster0.1pf6oxg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+    MONGODB_DB: str = "SmartCampus"
 
 settings = Settings()
