@@ -25,6 +25,8 @@ import logging
 from app.routers import auth, pages
 from app.core.config import settings
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("update_student")
 
 # ---------- env ----------
 load_dotenv()
@@ -711,6 +713,51 @@ def register_course(registration: CourseRegistration):
         return JSONResponse({"error": "Invalid registration data", "details": e.errors()}, status_code=422)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+# API endpoint to fetch student data
+@app.get("/api/student/{email}")
+def get_student(email: str):
+    student = db.users.find_one({"email": email})
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    student["_id"] = str(student["_id"])  # Convert ObjectId to string
+    return student
+
+# Define a Pydantic model for student data
+class StudentUpdate(BaseModel):
+    first_name: str
+    last_name: str
+    date_of_birth: str
+    marital_status: str
+    legal_sex: str
+    email: str
+    phone_number: str
+    address: str
+
+# API endpoint to fetch registered courses for a student
+@app.get("/api/registered_courses/{student_email}")
+def get_registered_courses(student_email: str):
+    registrations = list(db.registrations.find({"student_email": student_email}))
+    registered_courses = []
+
+    for registration in registrations:
+        course = db.courses.find_one({"_id": ObjectId(registration["course_id"])});
+        if course:
+            course["_id"] = str(course["_id"])  # Convert ObjectId to string
+            registration["course_details"] = {
+                "title": course.get("title", "N/A"),
+                "details": course.get("details", "N/A"),
+                "hours": course.get("hours", "N/A"),
+                "crn": course.get("crn", "N/A"),
+                "schedule_type": course.get("schedule_type", "N/A"),
+                "grade_mode": course.get("grade_mode", "N/A"),
+                "level": course.get("level", "N/A"),
+                "part_of_term": course.get("part_of_term", "N/A"),
+            }
+        registration["_id"] = str(registration["_id"])  # Convert ObjectId to string
+        registered_courses.append(registration)
+
+    return registered_courses
 
 # ------------------ Ticket & Appointment Endpoints ------------------
 
