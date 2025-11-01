@@ -1,3 +1,4 @@
+import anyio
 from fastapi import FastAPI, Request, Form, WebSocket, WebSocketDisconnect, File, UploadFile, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.requests import Request
@@ -61,7 +62,8 @@ oauth.register(
 )
 
 # ------------------ MongoDB Setup ------------------
-MONGO_URI = os.getenv("MONGODB_URI", "mongodb+srv://Manny0715:Manmeet12345@cluster0.1pf6oxg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+MONGO_URI = os.getenv(
+    "MONGODB_URI", "mongodb+srv://Manny0715:Manmeet12345@cluster0.1pf6oxg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
 client = MongoClient(MONGO_URI)
 db = client.SmartCampus
 users_collection = db.users
@@ -71,7 +73,8 @@ fs = gridfs.GridFS(db)
 
 # Ensure a text index exists for follow-ups (safe to call once)
 try:
-    db.articles.create_index([("title","text"), ("content","text"), ("category","text")])
+    db.articles.create_index(
+        [("title", "text"), ("content", "text"), ("category", "text")])
 except Exception:
     pass
 
@@ -110,31 +113,36 @@ def llm_complete(messages, model="gpt-4o-mini", temperature=0.4, max_tokens=180)
             return resp["choices"][0]["message"]["content"].strip()
         except Exception as v0_err:
             # bubble up a unified error so caller can switch to fallback
-            raise RuntimeError(f"OpenAI failed (v1: {v1_err!r}; v0: {v0_err!r})")
+            raise RuntimeError(
+                f"OpenAI failed (v1: {v1_err!r}; v0: {v0_err!r})")
+
 
 USE_LLM_FOLLOWUPS = os.getenv("USE_LLM_FOLLOWUPS", "1") == "1"
-FOLLOWUP_MODEL    = os.getenv("FOLLOWUP_MODEL", "gpt-4o-mini")
-DEBUG_FOLLOWUPS   = os.getenv("DEBUG_FOLLOWUPS", "1") == "1"
+FOLLOWUP_MODEL = os.getenv("FOLLOWUP_MODEL", "gpt-4o-mini")
+DEBUG_FOLLOWUPS = os.getenv("DEBUG_FOLLOWUPS", "1") == "1"
 
 ESCALATION_KEYWORDS = {
-    "agent","human","person","representative","talk to someone","talk to admin",
-    "live chat","connect me","escalate","call","phone","help desk","support"
+    "agent", "human", "person", "representative", "talk to someone", "talk to admin",
+    "live chat", "connect me", "escalate", "call", "phone", "help desk", "support"
 }
+
 
 def _wants_human(text: str) -> bool:
     q = (text or "").lower()
     return any(k in q for k in ESCALATION_KEYWORDS)
 
+
 def _mongo_text_search(query: str, limit: int = 8) -> List[Dict]:
     if not (query and query.strip()):
         return []
     cur = (db.articles.find(
-            {"$text": {"$search": query}},
-            {"title": 1, "category": 1, "url": 1, "score": {"$meta": "textScore"}}
-          )
-          .sort([("score", {"$meta": "textScore"})])
-          .limit(limit))
+        {"$text": {"$search": query}},
+        {"title": 1, "category": 1, "url": 1, "score": {"$meta": "textScore"}}
+    )
+        .sort([("score", {"$meta": "textScore"})])
+        .limit(limit))
     return list(cur)
+
 
 def _should_offer_live_chat(user_q: str, answer_text: str, hits: int) -> bool:
     if _wants_human(user_q):
@@ -145,6 +153,7 @@ def _should_offer_live_chat(user_q: str, answer_text: str, hits: int) -> bool:
     ]
     a = (answer_text or "").lower()
     return hits == 0 or any(p in a for p in low_conf)
+
 
 def _safe_json_list(s: str) -> List[str]:
     """
@@ -179,8 +188,8 @@ def _llm_generate_followups(user_q: str, answer_text: str, candidates: List[Dict
     ctx_lines = []
     for c in candidates[:10]:
         t = (c.get("title") or "").strip()
-        u = c.get("url","")
-        cat = c.get("category","")
+        u = c.get("url", "")
+        cat = c.get("category", "")
         if t:
             ctx_lines.append(f"- {t} [{cat}] {u}")
     ctx = "\n".join(ctx_lines) if ctx_lines else "(no candidates)"
@@ -201,7 +210,8 @@ def _llm_generate_followups(user_q: str, answer_text: str, candidates: List[Dict
     )
 
     text = llm_complete(
-        messages=[{"role":"system","content":sys}, {"role":"user","content":usr}],
+        messages=[{"role": "system", "content": sys},
+                  {"role": "user", "content": usr}],
         model=FOLLOWUP_MODEL,
         temperature=0.4,
         max_tokens=180,
@@ -210,13 +220,15 @@ def _llm_generate_followups(user_q: str, answer_text: str, candidates: List[Dict
     uniq, seen = [], set()
     for it in items:
         s = it.strip()
-        if s.endswith("?"): s = s[:-1]
+        if s.endswith("?"):
+            s = s[:-1]
         if s and s.lower() not in seen:
             seen.add(s.lower())
             uniq.append(s)
         if len(uniq) >= k:
             break
     return uniq
+
 
 def build_llm_style_followups(user_question: str, answer_text: str, k: int = 4):
     """
@@ -232,7 +244,8 @@ def build_llm_style_followups(user_question: str, answer_text: str, k: int = 4):
 
     if USE_LLM_FOLLOWUPS and os.getenv("OPENAI_API_KEY"):
         try:
-            suggestions = _llm_generate_followups(user_question, answer_text, hits, k=k)
+            suggestions = _llm_generate_followups(
+                user_question, answer_text, hits, k=k)
             if suggestions:
                 source = "openai"
         except Exception as e:
@@ -242,7 +255,7 @@ def build_llm_style_followups(user_question: str, answer_text: str, k: int = 4):
 
     if not suggestions:
         # graceful fallback: try KB titles, then a tiny curated list
-        base = [h.get("title","") for h in hits[:6] if h.get("title")]
+        base = [h.get("title", "") for h in hits[:6] if h.get("title")]
         suggestions = [s for s in base if s][:k]
         if not suggestions:
             suggestions = [
@@ -252,8 +265,10 @@ def build_llm_style_followups(user_question: str, answer_text: str, k: int = 4):
                 "how to apply for scholarships",
             ][:k]
 
-    chips = [{"label": s, "payload": {"type": "faq", "query": s}} for s in suggestions]
-    suggest_live_chat = _should_offer_live_chat(user_question, answer_text, hits=len(hits))
+    chips = [{"label": s, "payload": {"type": "faq", "query": s}}
+             for s in suggestions]
+    suggest_live_chat = _should_offer_live_chat(
+        user_question, answer_text, hits=len(hits))
     return chips[:k], suggest_live_chat, source
 
 
@@ -265,9 +280,10 @@ def diag_llm():
     try:
         key = os.getenv("OPENAI_API_KEY")
         if not key:
-            raise HTTPException(status_code=500, detail="OPENAI_API_KEY missing")
+            raise HTTPException(
+                status_code=500, detail="OPENAI_API_KEY missing")
         text = llm_complete(
-            messages=[{"role":"system","content":"Return the word OK"}],
+            messages=[{"role": "system", "content": "Return the word OK"}],
             model=FOLLOWUP_MODEL,
             temperature=0.0,
             max_tokens=4,
@@ -275,6 +291,7 @@ def diag_llm():
         return {"ok": True, "model": FOLLOWUP_MODEL, "reply": text}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
 
 print("[BOOT]",
       "USE_LLM_FOLLOWUPS=", USE_LLM_FOLLOWUPS,
@@ -284,7 +301,7 @@ print("[BOOT]",
 # ======================================================================================
 #                                 LIVE CHAT MANAGER
 # ======================================================================================
-import anyio
+
 
 class ChatManager:
     def __init__(self):
@@ -337,7 +354,8 @@ class ChatManager:
                         {"$set": {"student_connected": False, "status": "closed"}}
                     )
                     # remove from admin UI immediately
-                    anyio.from_thread.run(self.broadcast_admins, {"type": "session_removed", "session_id": sid})
+                    anyio.from_thread.run(self.broadcast_admins, {
+                                          "type": "session_removed", "session_id": sid})
                     print(f"❌ Student disconnected: {sid}")
 
     async def send_to_student(self, session_id: str, message: dict):
@@ -351,6 +369,7 @@ class ChatManager:
             except Exception:
                 # stale socket
                 pass
+
 
 manager = ChatManager()
 
@@ -385,8 +404,10 @@ async def student_ws(websocket: WebSocket, session_id: str):
                 })
             else:
                 # Calculate queue position
-                queued_sessions = list(live_chat_sessions.find({"status": "queued"}).sort("created_at", 1))
-                queue_position = next((i + 1 for i, s in enumerate(queued_sessions) if s["session_id"] == session_id), None)
+                queued_sessions = list(live_chat_sessions.find(
+                    {"status": "queued"}).sort("created_at", 1))
+                queue_position = next(
+                    (i + 1 for i, s in enumerate(queued_sessions) if s["session_id"] == session_id), None)
 
                 await manager.broadcast_admins({
                     "type": "queued_ping",
@@ -397,6 +418,7 @@ async def student_ws(websocket: WebSocket, session_id: str):
     except WebSocketDisconnect:
         print(f"[DEBUG] Student disconnected with session_id: {session_id}")
         manager.disconnect(websocket)
+
 
 @app.websocket("/ws/admin")
 async def admin_ws(websocket: WebSocket):
@@ -420,7 +442,8 @@ async def admin_ws(websocket: WebSocket):
                     continue
 
                 res = live_chat_sessions.update_one(
-                    {"session_id": session_id, "status": {"$in": ["queued","live"]}},
+                    {"session_id": session_id, "status": {
+                        "$in": ["queued", "live"]}},
                     {"$set": {"status": "live", "assigned_admin": admin_id}}
                 )
                 if res.matched_count == 0:
@@ -457,8 +480,68 @@ async def admin_ws(websocket: WebSocket):
                 })
 
             else:
-                await websocket.send_json({"type":"error","reason":"Unknown message type."})
+                await websocket.send_json({"type": "error", "reason": "Unknown message type."})
 
     except WebSocketDisconnect:
         print("[DEBUG] Admin disconnected")
         manager.disconnect(websocket)
+
+
+# ======================================================================================
+#                                   REST API
+# ======================================================================================
+@app.get("/api/chat/{session_id}")
+async def get_chat_history(session_id: str):
+    print(f"[DEBUG] Fetching chat history for session_id: {session_id}")
+    messages = list(live_chat_collection
+                    .find({"session_id": session_id}, {"_id": 0})
+                    .sort("created_at", 1))
+    print(f"[DEBUG] Retrieved messages: {messages}")
+    return messages
+
+
+@app.post("/api/chat/{session_id}/escalate")
+async def escalate(session_id: str):
+    # student has asked for an agent — surface to admins now
+    live_chat_sessions.update_one(
+        {"session_id": session_id},
+        {
+            "$setOnInsert": {"session_id": session_id, "assigned_admin": None},
+            "$set": {"status": "queued", "student_connected": True, "name": f"Student {session_id[:4]}"},
+        },
+        upsert=True
+    )
+    await manager.broadcast_admins({
+        "type": "new_session",
+        "session_id": session_id,
+        "status": "queued",
+        "name": f"Student {session_id[:4]}"
+    })
+    return {"ok": True}
+
+
+@app.post("/api/chat/{session_id}/end")
+async def end_chat(session_id: str):
+    live_chat_sessions.update_one(
+        {"session_id": session_id},
+        {"$set": {
+            "status": "closed",
+            "student_connected": False,
+            "assigned_admin": None,
+            "ended_at": datetime.utcnow()
+        }}
+    )
+    await manager.broadcast_admins({"type": "session_removed", "session_id": session_id})
+    return {"ok": True}
+
+
+@app.get("/api/admin/live_chats")
+async def list_live_chats():
+    docs = list(live_chat_sessions.find({}, {"_id": 0}))
+    for d in docs:
+        if not d.get("name"):
+            sid = d.get("session_id", "")
+            d["name"] = f"Student {sid[:4]}" if sid else "Student"
+    order = {"queued": 0, "live": 1, "closed": 2}
+    docs.sort(key=lambda x: order.get(x.get("status", "queued"), 9))
+    return docs
