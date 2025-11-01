@@ -655,3 +655,30 @@ async def api_appointments(upcoming: bool = False):
         return {"count": len(out), "appointments": out}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# Download GridFS attachment by id
+@app.get("/api/attachment/{file_id}")
+async def api_attachment(file_id: str):
+    try:
+        grid_out = fs.get(ObjectId(file_id))
+        data = grid_out.read()
+        return StreamingResponse(io.BytesIO(data), media_type=(grid_out.content_type or "application/octet-stream"), headers={"Content-Disposition": f"attachment; filename=\"{grid_out.filename or file_id}\""})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+@app.get("/api/user")
+async def get_user_details(request: Request):
+    try:
+        user = request.session.get("user")
+        print("[DEBUG] User details from session:", user)  # Debug log
+        if user:
+            return {
+                "full_name": user.get("full_name"),
+                "email": user.get("email"),
+                "role": user.get("role")
+            }
+        return JSONResponse({"error": "User not logged in"}, status_code=401)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
