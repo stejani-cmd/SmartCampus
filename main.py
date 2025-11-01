@@ -682,3 +682,144 @@ async def get_user_details(request: Request):
         return JSONResponse({"error": "User not logged in"}, status_code=401)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/stats")
+async def get_stats():
+    try:
+        knowledge_articles_count = db.knowledge_base.count_documents({})
+        departments_count = db.departments.count_documents(
+            {"status": "active"})
+        total_users_count = db.users.count_documents({})
+        upcoming_appointments_count = db.appointments.count_documents({
+            "status": {"$ne": "Cancelled"},
+            "date": {"$gte": date.today().isoformat()}
+        })
+
+        return {
+            "knowledge_articles": knowledge_articles_count,
+            "departments": departments_count,
+            "total_users": total_users_count,
+            "upcoming_appointments": upcoming_appointments_count
+        }
+    except Exception as e:
+        print(f"Error fetching stats: {e}")
+        return {
+            "knowledge_articles": 0,
+            "departments": 0,
+            "total_users": 0,
+            "upcoming_appointments": 0
+        }
+
+
+@app.get("/api/knowledge_base")
+async def get_knowledge_base():
+    try:
+        articles = list(db.knowledge_base.find({}, {"_id": 0}))
+        return {"articles": articles}
+    except Exception as e:
+        print(f"Error fetching knowledge base articles: {e}")
+        return {"articles": []}
+
+
+@app.post("/api/knowledge_base")
+async def add_knowledge_article(request: Request):
+    data = await request.json()
+    category = data.get("category")
+    title = data.get("title")
+    url = data.get("url")
+
+    if not category or not title or not url:
+        return JSONResponse({"error": "All fields are required."}, status_code=400)
+
+    try:
+        # Extract content from the URL automatically
+        from extract_web_content_to_mongo import extract_page, save_to_db
+        article = extract_page(url, category, title)
+        if not article:
+            return JSONResponse({"error": "Failed to fetch content from URL."}, status_code=400)
+
+        # Save to MongoDB
+        save_to_db(article)
+        return JSONResponse({"message": "Article added successfully."}, status_code=201)
+    except Exception as e:
+        print(f"Error adding article: {e}")
+        return JSONResponse({"error": "Internal server error."}, status_code=500)
+
+
+# ======================================================================================
+#                                  BOT ENDPOINT
+# ======================================================================================
+@app.post("/chat_question")
+async def chat_question(question: str = Form(...)):
+    from rag_pipeline import get_answer
+    answer, _ = get_answer(question)
+
+    chips, suggest_live_chat, fu_source = build_llm_style_followups(
+        user_question=question,
+        answer_text=answer or "",
+        k=4
+    )
+
+    if suggest_live_chat:
+        chips.append({"label": "Talk to an admin", "payload": {"type": "action", "action": "escalate"}})
+
+    resp = {
+        "answer": answer,
+        "suggest_live_chat": suggest_live_chat,
+        "suggested_followups": chips
+    }
+    if DEBUG_FOLLOWUPS:
+        resp["followup_generator"] = fu_source  # "openai" | "fallback" | "fallback_error"
+    return resp
+
+
+# Streaming version of chat_question
+@app.post("/chat_question_stream")
+async def chat_question_stream(question: str = Form(...)):
+    from rag_pipeline import get_answer_stream
+    
+    async def event_generator():
+        # Collect full answer for followup generation
+        full_answer = ""
+        
+        # Stream the answer chunks
+        for chunk in get_answer_stream(question):
+            full_answer += chunk
+            # Send each chunk as SSE (Server-Sent Events)
+            yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+        
+        # Generate followups after answer is complete
+        chips, suggest_live_chat, fu_source = build_llm_style_followups(
+            user_question=question,
+            answer_text=full_answer or "",
+            k=4
+        )
+        
+        if suggest_live_chat:
+            chips.append({"label": "Talk to an admin", "payload": {"type": "action", "action": "escalate"}})
+        
+        # Send followups
+        followup_data = {
+            "type": "followups",
+            "suggest_live_chat": suggest_live_chat,
+            "suggested_followups": chips
+        }
+        
+        if DEBUG_FOLLOWUPS:
+            followup_data["followup_generator"] = fu_source
+        
+        yield f"data: {json.dumps(followup_data)}\n\n"
+        
+        # Send done signal
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
