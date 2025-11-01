@@ -9,7 +9,7 @@ import torch
 client = MongoClient(
     "mongodb+srv://Manny0715:Manmeet12345@cluster0.1pf6oxg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 )
-db = client.smartassist
+db = client.SmartCampus
 kb_collection = db.knowledge_base
 
 
@@ -74,7 +74,7 @@ def format_sources_md(articles):
 def build_prompt(context_text, question):
     """Instruction for well-formatted, grounded answers in Markdown."""
     return f"""
-You are SmartAssist, a helpful AI assistant for Texas A&M University–Corpus Christi.
+You are SmartCampus, a helpful AI assistant for Texas A&M University–Corpus Christi.
 
 Follow the rules strictly:
 - Use ONLY the information in the provided Context.
@@ -110,7 +110,7 @@ def get_answer(question, top_k=3):
         model=HF_MODEL,
         messages=[
             {"role": "system",
-            "content": "You are SmartAssist for Texas A&M University–Corpus Christi. "
+            "content": "You are SmartCampus for Texas A&M University–Corpus Christi. "
                         "Answer ONLY from the provided Context. Use concise, well-formatted Markdown. "
                         "If it’s not in the Context, say you’re not sure."},
             {"role": "user", "content": prompt}

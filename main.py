@@ -61,9 +61,9 @@ oauth.register(
 )
 
 # ------------------ MongoDB Setup ------------------
-MONGO_URI = os.getenv("MONGODB_URI", "mongodb://mongo:27017/smartassist")
+MONGO_URI = os.getenv("MONGODB_URI", "mongodb+srv://Manny0715:Manmeet12345@cluster0.1pf6oxg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
 client = MongoClient(MONGO_URI)
-db = client.smartassist
+db = client.SmartCampus
 users_collection = db.users
 live_chat_collection = db.live_chat
 live_chat_sessions = db.live_chat_sessions
@@ -353,3 +353,112 @@ class ChatManager:
                 pass
 
 manager = ChatManager()
+
+
+# ======================================================================================
+#                                   WEBSOCKETS
+# ======================================================================================
+@app.websocket("/ws/student/{session_id}")
+async def student_ws(websocket: WebSocket, session_id: str):
+    print(f"[DEBUG] Student connected with session_id: {session_id}")
+    await manager.connect_student(websocket, session_id)
+    try:
+        while True:
+            data = await websocket.receive_json()
+            message_text = data.get("message", "")
+            print(f"[DEBUG] Received message from student: {message_text}")
+
+            live_chat_collection.insert_one({
+                "session_id": session_id,
+                "sender": "student",
+                "message": message_text,
+                "created_at": datetime.utcnow()
+            })
+
+            sess = live_chat_sessions.find_one({"session_id": session_id})
+            if sess and sess.get("status") == "live":
+                await manager.broadcast_admins({
+                    "type": "message",
+                    "session_id": session_id,
+                    "sender": "student",
+                    "message": message_text
+                })
+            else:
+                # Calculate queue position
+                queued_sessions = list(live_chat_sessions.find({"status": "queued"}).sort("created_at", 1))
+                queue_position = next((i + 1 for i, s in enumerate(queued_sessions) if s["session_id"] == session_id), None)
+
+                await manager.broadcast_admins({
+                    "type": "queued_ping",
+                    "session_id": session_id,
+                    "queue_position": queue_position
+                })
+
+    except WebSocketDisconnect:
+        print(f"[DEBUG] Student disconnected with session_id: {session_id}")
+        manager.disconnect(websocket)
+
+@app.websocket("/ws/admin")
+async def admin_ws(websocket: WebSocket):
+    print("[DEBUG] /ws/admin endpoint accessed")
+    print("[DEBUG] Admin connected")
+    await manager.connect_admin(websocket)
+    admin_id = str(id(websocket))
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+            print(f"[DEBUG] Received message from admin: {data}")
+
+            if msg_type == "join":
+                session_id = data.get("session_id")
+                sess = live_chat_sessions.find_one({"session_id": session_id})
+                if not sess or not sess.get("student_connected") or sess.get("status") == "closed":
+                    await websocket.send_json({"type": "error", "reason": "Student not connected / session closed."})
+                    await websocket.send_json({"type": "session_removed", "session_id": session_id})
+                    continue
+
+                res = live_chat_sessions.update_one(
+                    {"session_id": session_id, "status": {"$in": ["queued","live"]}},
+                    {"$set": {"status": "live", "assigned_admin": admin_id}}
+                )
+                if res.matched_count == 0:
+                    await websocket.send_json({"type": "error", "reason": "Session not found or closed."})
+                    continue
+
+                await manager.send_to_student(session_id, {
+                    "type": "status",
+                    "session_id": session_id,
+                    "status": "live"
+                })
+                await websocket.send_json({"type": "joined", "session_id": session_id})
+
+            elif msg_type == "message":
+                session_id = data.get("session_id")
+                message_text = data.get("message", "")
+
+                sess = live_chat_sessions.find_one({"session_id": session_id})
+                if not sess or sess.get("status") != "live" or sess.get("assigned_admin") != admin_id:
+                    await websocket.send_json({"type": "error", "reason": "Session not live or not assigned to you."})
+                    continue
+
+                live_chat_collection.insert_one({
+                    "session_id": session_id,
+                    "sender": "admin",
+                    "message": message_text,
+                    "created_at": datetime.utcnow()
+                })
+                await manager.send_to_student(session_id, {
+                    "type": "message",
+                    "session_id": session_id,
+                    "sender": "admin",
+                    "message": message_text
+                })
+
+            else:
+                await websocket.send_json({"type":"error","reason":"Unknown message type."})
+
+    except WebSocketDisconnect:
+        print("[DEBUG] Admin disconnected")
+        manager.disconnect(websocket)
