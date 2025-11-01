@@ -547,6 +547,137 @@ async def list_live_chats():
     return docs
 
 
+# ======================================================================================
+#                           TICKET CREATION FROM CHATBOT
+# ======================================================================================
+
+class TicketAnalysisRequest(BaseModel):
+    message: str
+
+
+class TicketCreateRequest(BaseModel):
+    subject: str
+    category: str
+    priority: str
+    description: str
+    student_name: str = ""
+    student_email: str = ""
+
+
+@app.post("/api/analyze_ticket")
+async def analyze_ticket_request(request: TicketAnalysisRequest, user: dict = Depends(get_current_user)):
+    """
+    Analyzes user's message using LLM to extract ticket information
+    """
+    try:
+        from rag_pipeline import get_answer
+        import re
+
+        # Use LLM to analyze the message
+        analysis_prompt = f"""
+        Analyze the following user message and extract ticket information.
+        
+        User message: "{request.message}"
+        
+        Extract the following:
+        1. Subject: A brief subject line (max 100 chars)
+        2. Category: One of (Technical Support, Academic, Financial, Housing, Registration, Other)
+        3. Priority: One of (Low, Medium, High) - based on urgency in the message
+        4. A clear description of the issue
+        
+        Respond in this exact format:
+        SUBJECT: [subject]
+        CATEGORY: [category]
+        PRIORITY: [priority]
+        DESCRIPTION: [description]
+        """
+
+        # Get LLM analysis
+        answer, _ = get_answer(analysis_prompt)
+
+        # Parse the response
+        subject_match = re.search(r'SUBJECT:\s*(.+)', answer)
+        category_match = re.search(r'CATEGORY:\s*(.+)', answer)
+        priority_match = re.search(r'PRIORITY:\s*(.+)', answer)
+        description_match = re.search(
+            r'DESCRIPTION:\s*(.+)', answer, re.DOTALL)
+
+        # Extract values or use defaults
+        subject = subject_match.group(1).strip(
+        ) if subject_match else "Support Request"
+        category = category_match.group(
+            1).strip() if category_match else "Other"
+        priority = priority_match.group(
+            1).strip() if priority_match else "Medium"
+        description = description_match.group(
+            1).strip() if description_match else request.message
+
+        # Validate category
+        valid_categories = ["Technical Support", "Academic",
+                            "Financial", "Housing", "Registration", "Other"]
+        if category not in valid_categories:
+            category = "Other"
+
+        # Validate priority
+        valid_priorities = ["Low", "Medium", "High"]
+        if priority not in valid_priorities:
+            priority = "Medium"
+
+        return {
+            "subject": subject[:100],  # Limit to 100 chars
+            "category": category,
+            "priority": priority,
+            "description": description
+        }
+    except Exception as e:
+        print(f"Error analyzing ticket: {e}")
+        # Fallback to basic extraction
+        return {
+            "subject": "Support Request",
+            "category": "Other",
+            "priority": "Medium",
+            "description": request.message
+        }
+
+
+@app.post("/api/tickets")
+async def create_ticket(ticket: TicketCreateRequest, user: dict = Depends(get_current_user)):
+    """
+    Creates a new ticket from chatbot
+    """
+    try:
+        # Get student information from session
+        student_email = user.get("email", "")
+        student_name = user.get("full_name", "")
+
+        # Create ticket document
+        ticket_doc = {
+            "student_email": student_email,
+            "student_name": student_name,
+            "subject": ticket.subject,
+            "category": ticket.category,
+            "priority": ticket.priority,
+            "description": ticket.description,
+            "status": "Open",
+            "created_at": datetime.now().isoformat(),
+            "last_updated": datetime.now().isoformat(),
+            "assigned_staff": None,
+            "assigned_to_name": None
+        }
+
+        # Insert into database
+        result = db.tickets.insert_one(ticket_doc)
+
+        return {
+            "success": True,
+            "ticket_id": str(result.inserted_id),
+            "message": "Ticket created successfully"
+        }
+    except Exception as e:
+        print(f"Error creating ticket: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ------------------ Ticket & Appointment Endpoints ------------------
 
 @app.post("/book_appointment")
@@ -762,7 +893,8 @@ async def chat_question(question: str = Form(...)):
     )
 
     if suggest_live_chat:
-        chips.append({"label": "Talk to an admin", "payload": {"type": "action", "action": "escalate"}})
+        chips.append({"label": "Talk to an admin", "payload": {
+                     "type": "action", "action": "escalate"}})
 
     resp = {
         "answer": answer,
@@ -770,7 +902,8 @@ async def chat_question(question: str = Form(...)):
         "suggested_followups": chips
     }
     if DEBUG_FOLLOWUPS:
-        resp["followup_generator"] = fu_source  # "openai" | "fallback" | "fallback_error"
+        # "openai" | "fallback" | "fallback_error"
+        resp["followup_generator"] = fu_source
     return resp
 
 
@@ -778,42 +911,43 @@ async def chat_question(question: str = Form(...)):
 @app.post("/chat_question_stream")
 async def chat_question_stream(question: str = Form(...)):
     from rag_pipeline import get_answer_stream
-    
+
     async def event_generator():
         # Collect full answer for followup generation
         full_answer = ""
-        
+
         # Stream the answer chunks
         for chunk in get_answer_stream(question):
             full_answer += chunk
             # Send each chunk as SSE (Server-Sent Events)
             yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-        
+
         # Generate followups after answer is complete
         chips, suggest_live_chat, fu_source = build_llm_style_followups(
             user_question=question,
             answer_text=full_answer or "",
             k=4
         )
-        
+
         if suggest_live_chat:
-            chips.append({"label": "Talk to an admin", "payload": {"type": "action", "action": "escalate"}})
-        
+            chips.append({"label": "Talk to an admin", "payload": {
+                         "type": "action", "action": "escalate"}})
+
         # Send followups
         followup_data = {
             "type": "followups",
             "suggest_live_chat": suggest_live_chat,
             "suggested_followups": chips
         }
-        
+
         if DEBUG_FOLLOWUPS:
             followup_data["followup_generator"] = fu_source
-        
+
         yield f"data: {json.dumps(followup_data)}\n\n"
-        
+
         # Send done signal
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
-    
+
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
