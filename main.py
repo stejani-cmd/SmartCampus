@@ -678,14 +678,18 @@ async def create_ticket(ticket: TicketCreateRequest, user: dict = Depends(get_cu
     except Exception as e:
         print(f"Error creating ticket: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    
+
 # API endpoint to fetch courses by term
+
+
 @app.get("/api/courses/{term}")
 def get_courses(term: str):
     courses = list(db.courses.find({"term": term}))
     return convert_objectid_to_str(courses)
 
 # Helper function to convert ObjectId to string
+
+
 def convert_objectid_to_str(doc):
     if isinstance(doc, list):
         return [convert_objectid_to_str(d) for d in doc]
@@ -696,12 +700,16 @@ def convert_objectid_to_str(doc):
     return doc
 
 # Define a Pydantic model for course registration
+
+
 class CourseRegistration(BaseModel):
     student_email: str
     course_id: str
     term: str
 
 # Updated API endpoint to register a student for a course
+
+
 @app.post("/api/register_course")
 def register_course(registration: CourseRegistration):
     try:
@@ -714,6 +722,33 @@ def register_course(registration: CourseRegistration):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+# API endpoint to get all staff members (for admin to assign tickets)
+
+
+@app.get("/api/staff")
+def get_all_staff():
+    try:
+        staff_members = list(db.users.find(
+            {"role": "staff", "status": "active"},
+            {"password": 0}  # Exclude password from response
+        ))
+        return convert_objectid_to_str(staff_members)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# API endpoint to get staff by department
+@app.get("/api/staff/department/{department}")
+def get_staff_by_department(department: str):
+    try:
+        staff_members = list(db.users.find(
+            {"role": "staff", "department": department, "status": "active"},
+            {"password": 0}
+        ))
+        return convert_objectid_to_str(staff_members)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # API endpoint to fetch student data
 @app.get("/api/student/{email}")
 def get_student(email: str):
@@ -724,6 +759,8 @@ def get_student(email: str):
     return student
 
 # Define a Pydantic model for student data
+
+
 class StudentUpdate(BaseModel):
     first_name: str
     last_name: str
@@ -734,14 +771,66 @@ class StudentUpdate(BaseModel):
     phone_number: str
     address: str
 
+
+# Updated API endpoint to update student data with full_name auto-generation
+@app.put("/api/student/{email}")
+def update_student(email: str, student_data: StudentUpdate):
+    try:
+        logger.info(f"Received update request for email: {email}")
+        logger.info(f"Request payload: {student_data.dict()}")
+
+        # Generate full_name separately
+        full_name = f"{student_data.first_name} {student_data.last_name}".strip()
+
+        # Update the database with the student data and full_name
+        update_data = student_data.dict()
+        update_data["full_name"] = full_name
+
+        result = db.users.update_one(
+            {"email": email}, {"$set": update_data}, upsert=True)
+        if result.modified_count == 0 and not result.upserted_id:
+            logger.error("Failed to update student data in the database.")
+            raise HTTPException(
+                status_code=400, detail="Failed to update student data")
+
+        logger.info("Student data updated successfully.")
+        return {"message": "Student data updated successfully"}
+    except Exception as e:
+        logger.exception("An error occurred while updating student data.")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# API endpoint to fetch registered classes for a student
+
+
+@app.get("/api/student/{email}/registered_classes")
+def get_registered_classes(email: str):
+    registrations = list(db.registrations.find({"student_email": email}))
+    registered_classes = []
+
+    for registration in registrations:
+        course = db.courses.find_one(
+            {"_id": ObjectId(registration["course_id"])})
+        if course:
+            course["_id"] = str(course["_id"])  # Convert ObjectId to string
+            registration["course_details"] = course
+        # Convert ObjectId to string
+        registration["_id"] = str(registration["_id"])
+        registered_classes.append(registration)
+
+    return registered_classes
+
 # API endpoint to fetch registered courses for a student
+
+
 @app.get("/api/registered_courses/{student_email}")
 def get_registered_courses(student_email: str):
-    registrations = list(db.registrations.find({"student_email": student_email}))
+    registrations = list(db.registrations.find(
+        {"student_email": student_email}))
     registered_courses = []
 
     for registration in registrations:
-        course = db.courses.find_one({"_id": ObjectId(registration["course_id"])});
+        course = db.courses.find_one(
+            {"_id": ObjectId(registration["course_id"])})
         if course:
             course["_id"] = str(course["_id"])  # Convert ObjectId to string
             registration["course_details"] = {
@@ -754,12 +843,14 @@ def get_registered_courses(student_email: str):
                 "level": course.get("level", "N/A"),
                 "part_of_term": course.get("part_of_term", "N/A"),
             }
-        registration["_id"] = str(registration["_id"])  # Convert ObjectId to string
+        # Convert ObjectId to string
+        registration["_id"] = str(registration["_id"])
         registered_courses.append(registration)
 
     return registered_courses
 
 # ------------------ Ticket & Appointment Endpoints ------------------
+
 
 @app.post("/book_appointment")
 async def book_appointment(
