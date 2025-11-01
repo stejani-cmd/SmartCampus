@@ -545,3 +545,51 @@ async def list_live_chats():
     order = {"queued": 0, "live": 1, "closed": 2}
     docs.sort(key=lambda x: order.get(x.get("status", "queued"), 9))
     return docs
+
+
+# ------------------ Ticket & Appointment Endpoints ------------------
+
+@app.post("/book_appointment")
+async def book_appointment(
+    type: str = Form(...),
+    date: str = Form(...),
+    time: str = Form(...),
+    notes: str = Form(""),
+    attachment: UploadFile | None = File(None)
+):
+    if not type or not date or not time:
+        return JSONResponse({"success": False, "error": "Missing required fields"}, status_code=400)
+
+    appt = {
+        "type": type,
+        "date": date,
+        "time": time,
+        "notes": notes,
+        "status": "scheduled"
+    }
+
+    try:
+        inserted_id = save_appointment(appt, attachment)
+        print(
+            f"[DEBUG] /book_appointment: inserted_id={inserted_id} attachment_present={attachment is not None}")
+        return {"success": True, "appointment_id": str(inserted_id)}
+    except Exception as e:
+        print(f"[ERROR] /book_appointment exception: {e}")
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+def save_appointment(appt: dict, attachment: UploadFile | None = None):
+    # store appointment in MongoDB; if attachment provided, save in GridFS and reference file id
+    if attachment is not None:
+        try:
+            content = attachment.file.read()
+            file_id = fs.put(content, filename=attachment.filename,
+                             contentType=attachment.content_type)
+            appt["attachment_id"] = file_id
+            appt["attachment_name"] = attachment.filename
+            appt["attachment_content_type"] = attachment.content_type
+        except Exception as e:
+            appt["attachment_error"] = f"failed to save to gridfs: {e}"
+
+    result = db.appointments.insert_one(appt)
+    inserted_id = result.inserted_id
