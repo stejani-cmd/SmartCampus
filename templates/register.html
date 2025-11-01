@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}SmartAssist | Register{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{{ url_for('static', path='css/auth.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/register.css') }}">
+{% endblock %}
+
+{% block content %}
+  <div class="auth-bg">
+    <div class="auth-card register-card">
+      <div class="auth-logo">
+        <img src="{{ url_for('static', path='assets/images/logo.png') }}"
+             alt="SmartAssist Logo">
+      </div>
+
+      <h2 class="auth-title">Create an Account</h2>
+
+      {% if error %}
+        <div class="auth-message error">{{ error }}</div>
+      {% elif message %}
+        <div class="auth-message success">{{ message }}</div>
+      {% endif %}
+
+      <form action="/register" method="post" class="auth-form">
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" name="full_name" placeholder="John Doe" required />
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" name="email" placeholder="john@tamucc.edu" required />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" name="password" placeholder="Enter your password" required />
+        </div>
+        <div class="form-group">
+          <label>Confirm Password</label>
+          <input type="password" name="confirm_password" placeholder="Confirm your password" required />
+        </div>
+        <button type="submit" class="register-btn">Register</button>
+      </form>
+
+      <p class="auth-footer-text">
+        Already have an account?
+        <a href="/login">Login here</a>
+      </p>
+      <p class="auth-footer-text">© 2025 TAMU-CC SmartAssist</p>
+    </div>
+  </div>
+{% endblock %}

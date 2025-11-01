@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}SmartCampus | Student Dashboard{% endblock %}
+
+{% block extra_css %}
+  <!-- global student dashboard styling -->
+  <link rel="stylesheet" href="{{ url_for('static', path='css/student.css') }}">
+{% endblock %}
+
+{% block content %}
+  <div class="student-container">
+    <!-- Hero Section -->
+    <div class="student-hero">
+      <div>
+        <h2>
+          Welcome, {{ user.full_name if user else "Student" }} 👋
+        </h2>
+        <p>Your campus services dashboard. Access SmartCampus features and track your requests in real-time.</p>
+      </div>
+      <img src="https://img.icons8.com/ios/200/ffffff/student-male.png" alt="Student Illustration">
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="student-stats">
+      <div class="student-stat">
+        <div>
+          <div class="number">3</div>
+          <div class="label">Open Tickets</div>
+        </div>
+        <i class="fa-solid fa-ticket"></i>
+      </div>
+      <div class="student-stat">
+        <div>
+          <div class="number">2</div>
+          <div class="label">Upcoming Appointments</div>
+        </div>
+        <i class="fa-solid fa-calendar-check"></i>
+      </div>
+      <div class="student-stat">
+        <div>
+          <div class="number">5</div>
+          <div class="label">Feedback Submitted</div>
+        </div>
+        <i class="fa-solid fa-star"></i>
+      </div>
+    </div>
+
+    <!-- Feature Cards -->
+    <div class="student-grid">
+      <div class="student-card" onclick="window.location.href='/chat'">
+        <i class="fa-solid fa-comments"></i>
+        <h3>Chatbot / FAQ</h3>
+        <p>Get instant answers to common campus questions anytime, anywhere.</p>
+      </div>
+      <div class="student-card" id="raise-ticket-card">
+        <i class="fa-solid fa-ticket"></i>
+        <h3>Raise Ticket</h3>
+        <p>Submit and track service requests with real-time updates.</p>
+      </div>
+      <div class="student-card" id="book-appointment-card">
+        <i class="fa-solid fa-calendar-check"></i>
+        <h3>Book Appointment</h3>
+        <p>Schedule meetings with advisors, professors, or offices conveniently.</p>
+      </div>
+      <div class="student-card" onclick="alert('Track Requests')">
+        <i class="fa-solid fa-list-check"></i>
+        <h3>Track Requests</h3>
+        <p>Monitor your tickets and appointment status in one place.</p>
+      </div>
+      <div class="student-card" onclick="alert('Feedback')">
+        <i class="fa-solid fa-star"></i>
+        <h3>Feedback / Surveys</h3>
+        <p>Share feedback to help improve campus services.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- floating chatbot -->
+  <button class="chatbot-btn" onclick="window.location.href='/chat'">
+    <i class="fa-solid fa-comments"></i>
+  </button>
+{% endblock %}

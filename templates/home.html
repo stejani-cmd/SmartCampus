@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Home | SmartAssist{% endblock %}
+
+{% block content %}
+  <!-- HERO -->
+  <section class="hero">
+    <!-- LEFT -->
+    <div class="hero-left">
+      <div class="eyebrow"><i class="fa-solid fa-bolt"></i> AI-Powered Campus Help, 24/7</div>
+      <h1>Empowering Students with <span style="color:#00AEEF">Smarter Support</span></h1>
+      <p>Your intelligent campus assistant for instant answers </p>
+     
+
+      <div class="typewrap" aria-live="polite">
+        <span class="type-label">Ask me anything:</span>
+        <span class="typewriter" id="typewriter"></span>
+      </div>
+
+      <div class="btns">
+        <a href="#features" class="btn">Explore Features</a>
+      </div>
+    </div>
+
+    
+    <!-- RIGHT -->
+    <div class="hero-right" aria-hidden="true">
+      <div class="bot-wrap">
+        <div class="ring"></div>
+        <img
+          class="bot-img"
+          src="{{ url_for('static', path='assets/images/robot-poses.png') }}"
+          alt="SmartCampus bot illustration floating"
+        />
+        <div class="chip" role="group" aria-label="Quick start">
+          <span class="chip-text">
+            <i class="fa-regular fa-message" aria-hidden="true"></i>
+            "Hey! Need Help ?”
+          </span>
+        <a class="btn-chip" href="/login">Try SmartCampus</a>
+          
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ABOUT -->
+  <section class="about" id="about">
+    <h2>About SmartCampus</h2>
+    <p>SmartCampus is an AI-powered virtual assistant designed exclusively for TAMUCC students. It combines intelligent knowledge retrieval, real-time chat assistance, and integrated service tools — all to make your academic life smoother and more connected.</p>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features" id="features">
+    <h2>Key Features</h2>
+    <div class="features-container">
+      <div class="feature-card"><i class="fa-solid fa-book"></i><h3>Intelligent Knowledge Base</h3><p>Search a database of articles, guides, and FAQs instantly.</p></div>
+      <div class="feature-card"><i class="fa-solid fa-robot"></i><h3>AI-Powered Chatbot</h3><p>Get real-time, natural language answers anytime.</p></div>
+      <div class="feature-card"><i class="fa-solid fa-ticket"></i><h3>Service Request & Ticketing</h3><p>Submit and track your campus service requests easily.</p></div>
+      <div class="feature-card"><i class="fa-solid fa-calendar-check"></i><h3>Appointment Scheduling</h3><p>Book advising or service meetings with ease.</p></div>
+      <div class="feature-card"><i class="fa-solid fa-star"></i><h3>Feedback & Surveys</h3><p>Share your feedback directly through built-in surveys.</p></div>
+      <div class="feature-card"><i class="fa-solid fa-users"></i><h3>Community Forum</h3><p>Engage in peer-to-peer Q&A and collaboration spaces.</p></div>
+      <!-- Duplicate for seamless loop -->
+      <div class="feature-card"><i class="fa-solid fa-book"></i><h3>Intelligent Knowledge Base</h3><p>Search a database of articles, guides, and FAQs instantly.</p></div>
+      <div class="feature-card"><i class="fa-solid fa-robot"></i><h3>AI-Powered Chatbot</h3><p>Get real-time, natural language answers anytime.</p></div>
+      <div class="feature-card"><i class="fa-solid fa-ticket"></i><h3>Service Request & Ticketing</h3><p>Submit and track your campus service requests easily.</p></div>
+      <div class="feature-card"><i class="fa-solid fa-calendar-check"></i><h3>Appointment Scheduling</h3><p>Book advising or service meetings with ease.</p></div>
+      <div class="feature-card"><i class="fa-solid fa-star"></i><h3>Feedback & Surveys</h3><p>Share your feedback directly through built-in surveys.</p></div>
+      <div class="feature-card"><i class="fa-solid fa-users"></i><h3>Community Forum</h3><p>Engage in peer-to-peer Q&A and collaboration spaces.</p></div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta">
+    <h2>Experience the Future of Campus Support</h2>
+    <p>Join thousands of students already simplifying their campus experience with SmartCampus.</p>
+    <a href="/login" class="btn">Get Started</a>
+  </section>
+{% endblock %}
+
+{% block extra_js %}
+  <script>
+    (function(){
+      const el = document.getElementById('typewriter');
+      const items = [
+        'admission questions',
+        'course & registration doubts',
+        'campus events & deadlines',
+        'scholarship & financial aid info',
+        'housing & dining queries',
+        'IT help & service requests',
+        'career services & advising'
+      ];
+
+      const prefix = '';
+      const typingDelay = 68;
+      const holdDelay   = 1200;
+      const eraseDelay  = 36;
+
+      let i = 0, j = 0, typing = true;
+
+      function tick(){
+        const text = prefix + items[i];
+        if (typing){
+          el.textContent = text.slice(0, j++);
+          if (j <= text.length){ return setTimeout(tick, typingDelay); }
+          typing = false;
+          return setTimeout(tick, holdDelay);
+        } else {
+          el.textContent = text.slice(0, j--);
+          if (j >= prefix.length){ return setTimeout(tick, eraseDelay); }
+          typing = true; i = (i + 1) % items.length; j = prefix.length;
+          return setTimeout(tick, 220);
+        }
+      }
+      j = 0; tick();
+    })();
+  </script>
+{% endblock %}
+

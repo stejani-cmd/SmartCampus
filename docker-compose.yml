@@ -1,0 +1,40 @@
+version: "3.9"
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      # Make logs immediate and file watching reliable across Docker Desktop/macOS/Windows
+      PYTHONUNBUFFERED: "1"
+      WATCHFILES_FORCE_POLLING: "1"
+      # If you made the code read from env:
+      MONGODB_URI: mongodb://mongo:27017/smartassist
+      # OPENAI_API_KEY: ...
+      # HF_TOKEN: ...
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      # Bind-mount your working copy so code edits reflect instantly
+      - .:/app
+      # Keep model downloads between runs (SentenceTransformers/Torch)
+      - hf-cache:/root/.cache
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_DATABASE: smartassist
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27017:27017"
+    restart: unless-stopped
+
+volumes:
+  hf-cache:
+  mongo-data:
