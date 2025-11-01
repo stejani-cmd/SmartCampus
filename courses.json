@@ -1,0 +1,68 @@
+[
+  {
+    "term": "Fall 2025",
+    "title": "Computer Vision",
+    "details": "COSC 6326, 002",
+    "hours": 3,
+    "crn": 73633,
+    "schedule_type": "Lecture",
+    "grade_mode": "Normal Grading",
+    "level": "Graduate",
+    "part_of_term": "Full Term"
+  },
+  {
+    "term": "Fall 2025",
+    "title": "Design and Analysis of Algorithms",
+    "details": "COSC 6334, 001",
+    "hours": 3,
+    "crn": 70948,
+    "schedule_type": "Lecture",
+    "grade_mode": "Normal Grading",
+    "level": "Graduate Doctoral",
+    "part_of_term": "Full Term"
+  },
+  {
+    "term": "Fall 2025",
+    "title": "Human-Computer Interaction",
+    "details": "COSC 6340, 001",
+    "hours": 3,
+    "crn": 73635,
+    "schedule_type": "Lecture",
+    "grade_mode": "Normal Grading",
+    "level": "Graduate",
+    "part_of_term": "Full Term"
+  },
+  {
+    "term": "Spring 2025",
+    "title": "Parallel Computing",
+    "details": "COSC 6360, 001",
+    "hours": 3,
+    "crn": 11877,
+    "schedule_type": "Lecture",
+    "grade_mode": "Normal Grading",
+    "level": "Graduate",
+    "part_of_term": "Full Term"
+  },
+  {
+    "term": "Spring 2025",
+    "title": "Network Security",
+    "details": "COSC 6376, 001",
+    "hours": 3,
+    "crn": 12251,
+    "schedule_type": "Lecture",
+    "grade_mode": "Normal Grading",
+    "level": "Graduate",
+    "part_of_term": "Full Term"
+  },
+  {
+    "term": "Spring 2025",
+    "title": "Directed Independent Study",
+    "details": "COSC 6396, 001",
+    "hours": 3,
+    "crn": 13555,
+    "schedule_type": "Independent Study",
+    "grade_mode": "Normal Grading",
+    "level": "Graduate",
+    "part_of_term": "Full Term"
+  }
+]
