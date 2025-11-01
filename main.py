@@ -676,7 +676,41 @@ async def create_ticket(ticket: TicketCreateRequest, user: dict = Depends(get_cu
     except Exception as e:
         print(f"Error creating ticket: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+# API endpoint to fetch courses by term
+@app.get("/api/courses/{term}")
+def get_courses(term: str):
+    courses = list(db.courses.find({"term": term}))
+    return convert_objectid_to_str(courses)
 
+# Helper function to convert ObjectId to string
+def convert_objectid_to_str(doc):
+    if isinstance(doc, list):
+        return [convert_objectid_to_str(d) for d in doc]
+    elif isinstance(doc, dict):
+        return {k: convert_objectid_to_str(v) for k, v in doc.items()}
+    elif isinstance(doc, ObjectId):
+        return str(doc)
+    return doc
+
+# Define a Pydantic model for course registration
+class CourseRegistration(BaseModel):
+    student_email: str
+    course_id: str
+    term: str
+
+# Updated API endpoint to register a student for a course
+@app.post("/api/register_course")
+def register_course(registration: CourseRegistration):
+    try:
+        # Validate the registration data
+        registration_data = registration.dict()
+        db.registrations.insert_one(registration_data)
+        return {"message": "Registration successful"}
+    except ValidationError as e:
+        return JSONResponse({"error": "Invalid registration data", "details": e.errors()}, status_code=422)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 # ------------------ Ticket & Appointment Endpoints ------------------
 
