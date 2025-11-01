@@ -1,0 +1,122 @@
+[
+  {
+    "staff_id": "STAFF001",
+    "full_name": "Dr. Sarah Johnson",
+    "email": "sarah.johnson@tamucc.edu",
+    "password": "staff123",
+    "role": "staff",
+    "department": "Academic Advising",
+    "position": "Senior Academic Advisor",
+    "specialization": ["Course Registration", "Degree Planning", "Academic Probation"],
+    "phone": "361-825-2345",
+    "status": "active"
+  },
+  {
+    "staff_id": "STAFF002",
+    "full_name": "Michael Chen",
+    "email": "michael.chen@tamucc.edu",
+    "password": "staff123",
+    "role": "staff",
+    "department": "IT Support",
+    "position": "IT Support Specialist",
+    "specialization": ["Password Reset", "System Access", "Software Installation", "Email Issues"],
+    "phone": "361-825-3456",
+    "status": "active"
+  },
+  {
+    "staff_id": "STAFF003",
+    "full_name": "Dr. Maria Rodriguez",
+    "email": "maria.rodriguez@tamucc.edu",
+    "password": "staff123",
+    "role": "staff",
+    "department": "Academic Advising",
+    "position": "Academic Advisor - Engineering",
+    "specialization": ["Engineering Advising", "Course Prerequisites", "Transfer Credits"],
+    "phone": "361-825-4567",
+    "status": "active"
+  },
+  {
+    "staff_id": "STAFF004",
+    "full_name": "James Wilson",
+    "email": "james.wilson@tamucc.edu",
+    "password": "staff123",
+    "role": "staff",
+    "department": "Financial Aid",
+    "position": "Financial Aid Officer",
+    "specialization": ["FAFSA", "Scholarships", "Student Loans", "Payment Plans"],
+    "phone": "361-825-5678",
+    "status": "active"
+  },
+  {
+    "staff_id": "STAFF005",
+    "full_name": "Lisa Patel",
+    "email": "lisa.patel@tamucc.edu",
+    "password": "staff123",
+    "role": "staff",
+    "department": "IT Support",
+    "position": "Network Administrator",
+    "specialization": ["Network Issues", "VPN Access", "Wi-Fi Problems", "System Maintenance"],
+    "phone": "361-825-6789",
+    "status": "active"
+  },
+  {
+    "staff_id": "STAFF006",
+    "full_name": "Dr. Robert Taylor",
+    "email": "robert.taylor@tamucc.edu",
+    "password": "staff123",
+    "role": "staff",
+    "department": "Registrar",
+    "position": "Assistant Registrar",
+    "specialization": ["Transcripts", "Enrollment Verification", "Grade Changes", "Degree Audits"],
+    "phone": "361-825-7890",
+    "status": "active"
+  },
+  {
+    "staff_id": "STAFF007",
+    "full_name": "Jennifer Martinez",
+    "email": "jennifer.martinez@tamucc.edu",
+    "password": "staff123",
+    "role": "staff",
+    "department": "Student Services",
+    "position": "Student Services Coordinator",
+    "specialization": ["Housing", "Student Life", "Disability Services", "Student Conduct"],
+    "phone": "361-825-8901",
+    "status": "active"
+  },
+  {
+    "staff_id": "STAFF008",
+    "full_name": "David Kim",
+    "email": "david.kim@tamucc.edu",
+    "password": "staff123",
+    "role": "staff",
+    "department": "IT Support",
+    "position": "Help Desk Technician",
+    "specialization": ["General IT Support", "Canvas Issues", "Printing Problems", "Account Issues"],
+    "phone": "361-825-9012",
+    "status": "active"
+  },
+  {
+    "staff_id": "STAFF009",
+    "full_name": "Dr. Amanda Brown",
+    "email": "amanda.brown@tamucc.edu",
+    "password": "staff123",
+    "role": "staff",
+    "department": "Academic Advising",
+    "position": "Academic Advisor - Business",
+    "specialization": ["Business Advising", "Internship Placement", "Career Planning"],
+    "phone": "361-825-0123",
+    "status": "active"
+  },
+  {
+    "staff_id": "STAFF010",
+    "full_name": "Carlos Hernandez",
+    "email": "carlos.hernandez@tamucc.edu",
+    "password": "staff123",
+    "role": "staff",
+    "department": "Financial Aid",
+    "position": "Scholarship Coordinator",
+    "specialization": ["Scholarships", "Financial Aid Appeals", "Emergency Funding"],
+    "phone": "361-825-1234",
+    "status": "active"
+  }
+]
