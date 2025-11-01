@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartAssist Chat | TAMUCC Campus Assistant</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            tamuccBlue: '#003366',
+            tamuccTeal: '#007A78',
+            tamuccLight: '#00AEEF',
+            tamuccGray: '#F4F7FA',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+
+<body class="bg-gradient-to-br from-tamuccBlue via-tamuccTeal to-tamuccLight min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="backdrop-blur-md bg-white/10 border-b border-white/20 text-white shadow-lg">
+    <div class="max-w-6xl mx-auto flex justify-between items-center px-6 py-4">
+      <div class="flex items-center space-x-3">
+        <img src="{{ url_for('static', path='assets/images/logo.png') }}"
+          alt="SmartAssist Logo"
+          class="h-10 w-10 object-contain rounded-lg shadow-md border border-gray-200">
+        <div>
+          <h1 class="text-2xl font-semibold tracking-wide"> SmartAssist </h1>
+          <p class="text-xs text-white/70">TAMUCC Campus Assistant</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <button id="end-live-chat"
+                class="hidden text-sm bg-white/20 px-3 py-1 rounded-lg hover:bg-white hover:text-tamuccTeal transition">
+          End live chat
+        </button>
+
+        <button id="clear-chat"
+                class="text-sm bg-white/20 px-3 py-1 rounded-lg hover:bg-white hover:text-tamuccTeal transition">
+          Clear Chat
+        </button>
+
+        <a href="/student_home" class="hover:text-tamuccLight text-sm">Home</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Chat Container -->
+  <main class="flex-grow flex justify-center px-4 py-4">
+    <div class="w-full max-w-4xl bg-white/80 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200 flex flex-col h-[calc(100vh-180px)] overflow-hidden">
+
+      <!-- Chat Header -->
+      <div class="bg-tamuccTeal text-white px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <div class="h-3 w-3 bg-green-400 rounded-full animate-pulse"></div>
+          <h2 class="font-semibold text-lg">SmartAssist Virtual Assistant</h2>
+        </div>
+        <span id="live-status" class="hidden text-xs bg-white/20 px-2 py-1 rounded">Live chat connected</span>
+      </div>
+
+      <!-- Queue Timer (appears only after escalate) -->
+      <div id="queue-timer" class="hidden text-xs text-gray-700 bg-yellow-50 border-b border-yellow-200 px-6 py-2">
+        Connecting you to an admin…
+      </div>
+
+      <!-- Single Chat Window -->
+      <div id="chat-window" class="flex-1 overflow-y-auto p-6 space-y-4 bg-tamuccGray">
+        <div class="flex items-start space-x-3">
+          <div class="w-10 h-10 bg-tamuccTeal rounded-full flex items-center justify-center text-white font-bold">S</div>
+          <div class="bg-white px-4 py-2 rounded-2xl shadow text-gray-800 max-w-[70%]">
+            👋 Hi! I’m <strong>SmartAssist</strong>. How can I help you today?
+          </div>
+        </div>
+      </div>
+
+      <!-- Typing Indicator -->
+      <div id="typing" class="hidden px-6 py-2 bg-tamuccGray border-t border-gray-200">
+        <div class="flex space-x-2 items-center text-gray-500">
+          <span class="dot bg-gray-400 w-2 h-2 rounded-full animate-bounce"></span>
+          <span class="dot bg-gray-400 w-2 h-2 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+          <span class="dot bg-gray-400 w-2 h-2 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+          <p class="text-sm ml-2">SmartAssist is typing...</p>
+        </div>
+      </div>
+
+      <!-- Single Input Area (used by both bot & live chat) -->
+      <div class="border-t border-gray-200 bg-white p-4 flex items-center space-x-3">
+        <input id="chat-input" type="text" placeholder="Ask me anything about campus services..." 
+               class="flex-grow bg-gray-100 rounded-full px-5 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-tamuccTeal">
+        <button id="send-btn" class="bg-tamuccTeal text-white px-5 py-3 rounded-full hover:bg-tamuccLight transition font-semibold">
+          ➤
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- MD libs BEFORE the inline script -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+
+  <script>
+    const chatWindow   = document.getElementById('chat-window');
+    const chatInput    = document.getElementById('chat-input');
+    const sendBtn      = document.getElementById('send-btn');
+    const clearChat    = document.getElementById('clear-chat');
+    const typingIndicator = document.getElementById('typing');
+    const endLiveBtn   = document.getElementById('end-live-chat');
+    const liveStatus   = document.getElementById('live-status');
+    const queueTimerEl = document.getElementById('queue-timer');
+
+    // ---------- Persistent Session ----------
+    let sessionId = localStorage.getItem('student_session_id');
+    if (!sessionId) {
+      sessionId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+      localStorage.setItem('student_session_id', sessionId);
+    }
+
+    // ---------- Live chat state ----------
+    let isLiveChat = false;
+
+    // ---------- WebSocket (lazy: open only after escalate) ----------
+    let ws = null;
+    function connectStudentSocket() {
+      if (ws && ws.readyState === WebSocket.OPEN) return;
+      ws = new WebSocket(`${location.origin.replace('http', 'ws')}/ws/student/${sessionId}`);
+
+      ws.onopen = () => console.log('Connected to live chat WebSocket');
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'message') {
+          if (data.sender === 'admin') appendMessage('admin', data.message);
+        }
+
+        if (data.type === 'status' && data.status === 'live') {
+          stopQueueTimer();
+          liveStatus.classList.remove('hidden');
+          appendMessage('system', 'An admin has joined the chat.');
+        }
+
+        if (data.type === 'queued_ping') {
+          updateQueuePosition(data.queue_position);
+        }
+      };
+
+      ws.onclose = () => {
+        if (isLiveChat) {
+          appendMessage('system', 'Live chat disconnected. You can try reconnecting.');
+          leaveLiveChatUI();
+        }
+      };
+
+      ws.onerror = (err) => console.error('WebSocket error:', err);
+    }
+
+    function updateQueuePosition(position) {
+      const queueTimerEl = document.getElementById('queue-timer');
+      if (position) {
+        queueTimerEl.textContent = `Connecting you to an admin… You are #${position} in the queue`;
+        queueTimerEl.classList.remove('hidden');
+      } else {
+        queueTimerEl.textContent = 'Connecting you to an admin…';
+      }
+    }
+
+    // ---------- Timer helpers ----------
+    let _queueTimer = null, _queueEndAt = null;
+    function startQueueTimer(seconds = 300) { // Default to 5 minutes
+      console.log("Starting queue timer for", seconds, "seconds");
+      _queueEndAt = Date.now() + seconds * 1000;
+      renderTimer();
+      queueTimerEl.classList.remove('hidden'); // Ensure the timer element is visible
+      _queueTimer = setInterval(() => {
+        console.log("Rendering timer...");
+        renderTimer();
+      }, 500);
+    }
+    function stopQueueTimer() {
+      if (_queueTimer) clearInterval(_queueTimer);
+      _queueTimer = null; _queueEndAt = null;
+      queueTimerEl.classList.add('hidden');
+    }
+    function renderTimer() {
+      if (!_queueEndAt) {
+        console.log("_queueEndAt is not set");
+        return;
+      }
+      const remain = Math.max(0, Math.ceil((_queueEndAt - Date.now()) / 1000));
+      const minutes = Math.floor(remain / 60);
+      const seconds = remain % 60;
+      console.log(`Time remaining: ${minutes}:${seconds}`);
+      queueTimerEl.textContent = `Connecting you to an admin… ${minutes}:${seconds.toString().padStart(2, '0')}`;
+      queueTimerEl.classList.remove('hidden');
+      if (remain <= 0) {
+        stopQueueTimer();
+        queueTimerEl.textContent = "Still waiting for an admin. Thank you for your patience.";
+      }
+    }
+
+    // ---------- UI helpers ----------
+    function avatar(letter, color='bg-tamuccTeal') {
+      return `<div class="w-10 h-10 ${color} rounded-full flex items-center justify-center text-white font-bold">${letter}</div>`;
+    }
+    function escapeHTML(s) { return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+    function renderMarkdown(md) {
+      try {
+        const html = marked.parse(md, { mangle: false, headerIds: false });
+        return DOMPurify.sanitize(html);
+      } catch { 
+        const div = document.createElement('div'); div.textContent = md || ""; return div.innerHTML;
+      }
+    }
+    function enhanceLinks(el) {
+      el.querySelectorAll('a').forEach(a => {
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.classList.add('text-tamuccTeal','underline','hover:text-tamuccLight');
+      });
+    }
+
+    function appendMessage(role, text, opts = {}) {
+      const row = document.createElement('div');
+      row.className = `flex mb-3 ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+
+      const time = new Date().toLocaleString();
+      const chipsId = `fu_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+
+      if (role === 'bot') {
+        const html = renderMarkdown(text);
+        row.innerHTML = `
+          ${avatar('S')}
+          <div class="bg-white px-4 py-2 rounded-2xl shadow text-gray-800 max-w-[70%]">
+            <div>${html}</div>
+            <div class="text-[10px] opacity-60 text-right mt-1">${time}</div>
+            <div id="${chipsId}" class="mt-2 flex flex-wrap gap-2"></div>
+          </div>`;
+        enhanceLinks(row);
+
+        // per-message followups
+        if (Array.isArray(opts.followups) && opts.followups.length) {
+          const area = row.querySelector(`#${chipsId}`);
+          opts.followups.forEach(sug => {
+            const btn = document.createElement('button');
+            btn.className = 'mr-2 mb-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-300 bg-white hover:bg-gray-50 text-sm';
+            btn.textContent = sug.label || 'Follow up';
+            btn.onclick = async () => {
+              area.innerHTML = '';
+              area.classList.add('hidden');
+              await onFollowupClick(sug);
+            };
+            area.appendChild(btn);
+          });
+        }
+      } else if (role === 'user') {
+        row.classList.add('justify-end');
+        row.innerHTML = `
+          <div class="bg-tamuccTeal text-white px-4 py-2 rounded-2xl shadow max-w-[70%]">
+            ${escapeHTML(text)}
+            <div class="text-[10px] opacity-75 text-right mt-1">${time}</div>
+          </div>`;
+      } else if (role === 'admin') {
+        row.innerHTML = `
+          ${avatar('A','bg-blue-600')}
+          <div class="bg-white px-4 py-2 rounded-2xl shadow text-gray-800 max-w-[70%]">
+            <span class="text-xs text-blue-600 font-semibold mr-2">Admin</span>${escapeHTML(text)}
+            <div class="text-[10px] opacity-60 text-right mt-1">${time}</div>
+          </div>`;
+      } else if (role === 'system') {
+        row.innerHTML = `
+          <div class="mx-auto text-xs text-gray-600 bg-gray-100 border border-gray-200 px-3 py-1 rounded-full">
+            ${escapeHTML(text)}
+          </div>`;
+      }
+
+      chatWindow.appendChild(row);
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+
+      // Optional: legacy CTA support (if your backend sets suggest_live_chat=true)
+      if (opts.showLiveChatCTA) {
+        const cta = document.createElement('div');
+        cta.className = 'flex justify-start';
+        cta.innerHTML = `
+          <button id="start-live-chat"
+                  class="mt-2 text-sm bg-tamuccTeal/10 text-tamuccTeal px-3 py-1 rounded-full hover:bg-tamuccTeal/20">
+            Start Live Chat with Admin
+          </button>`;
+        chatWindow.appendChild(cta);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+      }
+    }
+
+    // ---------- Bot flow ----------
+    async function sendToBot(text) {
+      // Check if user wants to create a ticket
+      const ticketKeywords = ['raise ticket', 'create ticket', 'submit ticket', 'report issue', 'file complaint', 'having issue', 'facing issue', 'problem with'];
+      const isTicketRequest = ticketKeywords.some(keyword => text.toLowerCase().includes(keyword));
+      
+      if (isTicketRequest) {
+        await handleTicketCreation(text);
+        return;
+      }
+
+      typingIndicator.classList.remove('hidden');
+      
+      try {
+        const formData = new FormData();
+        formData.append('question', text);
+
+        const res = await fetch('/chat_question', { method: 'POST', body: formData });
+        const data = await res.json();
+        typingIndicator.classList.add('hidden');
+
+        // Simulate streaming by displaying the answer word by word
+        await streamMessage(data.answer, data.suggested_followups || [], data.suggest_live_chat || false);
+
+      } catch (err) {
+        typingIndicator.classList.add('hidden');
+        console.error('Error:', err);
+        appendMessage('bot', 'Sorry, something went wrong. Please try again later.');
+      }
+    }
+
+    // Function to simulate streaming effect
+    async function streamMessage(fullText, followups, showLiveChatCTA) {
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+      const chipsId = `fu_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+      
+      const row = document.createElement('div');
+      row.className = 'flex mb-3 justify-start';
+      row.id = messageId;
+      
+      const time = new Date().toLocaleString();
+      row.innerHTML = `
+        ${avatar('S')}
+        <div class="bg-white px-4 py-2 rounded-2xl shadow text-gray-800 max-w-[70%]">
+          <div id="${messageId}-content"></div>
+          <div class="text-[10px] opacity-60 text-right mt-1">${time}</div>
+          <div id="${chipsId}" class="mt-2 flex flex-wrap gap-2"></div>
+        </div>`;
+      
+      chatWindow.appendChild(row);
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+
+      const contentDiv = document.getElementById(`${messageId}-content`);
+      
+      // Split text into words for streaming effect
+      const words = fullText.split(' ');
+      let currentText = '';
+      
+      for (let i = 0; i < words.length; i++) {
+        currentText += (i > 0 ? ' ' : '') + words[i];
+        contentDiv.innerHTML = renderMarkdown(currentText);
+        enhanceLinks(row);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+        
+        // Adjust delay based on word length for more natural feel
+        const delay = words[i].length > 10 ? 30 : 20;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+
+      // Ensure final content is fully rendered
+      contentDiv.innerHTML = renderMarkdown(fullText);
+      enhanceLinks(row);
+
+      // Add followup buttons after streaming is complete
+      if (followups.length > 0) {
+        const chipsArea = document.getElementById(chipsId);
+        followups.forEach(sug => {
+          const btn = document.createElement('button');
+          btn.className = 'mr-2 mb-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-300 bg-white hover:bg-gray-50 text-sm';
+          btn.textContent = sug.label || 'Follow up';
+          btn.onclick = async () => {
+            chipsArea.innerHTML = '';
+            chipsArea.classList.add('hidden');
+            await onFollowupClick(sug);
+          };
+          chipsArea.appendChild(btn);
+        });
+      }
+
+      // Add live chat CTA if needed
+      if (showLiveChatCTA) {
+        const cta = document.createElement('div');
+        cta.className = 'flex justify-start';
+        cta.innerHTML = `
+          <button id="start-live-chat"
+                  class="mt-2 text-sm bg-tamuccTeal/10 text-tamuccTeal px-3 py-1 rounded-full hover:bg-tamuccTeal/20">
+            Start Live Chat with Admin
+          </button>`;
+        chatWindow.appendChild(cta);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+      }
+    }
+
+    // ---------- Ticket Creation Flow ----------
+    let ticketData = {};
+    let ticketStep = 0;
+
+    async function handleTicketCreation(initialMessage) {
+      ticketData = {
+        description: initialMessage,
+        category: '',
+        priority: '',
+        subject: ''
+      };
+      ticketStep = 0;
+
+      appendMessage('bot', "I'll help you create a ticket for your issue. Let me gather some information...");
+      
+      // Use AI to extract initial information
+      await analyzeTicketRequest(initialMessage);
+    }
+
+    async function analyzeTicketRequest(userMessage) {
+      typingIndicator.classList.remove('hidden');
+      
+      try {
+        const res = await fetch('/api/analyze_ticket', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: userMessage })
+        });
+        
+        const data = await res.json();
+        typingIndicator.classList.add('hidden');
+        
+        // Populate ticket data with AI analysis
+        ticketData.subject = data.subject || '';
+        ticketData.category = data.category || '';
+        ticketData.priority = data.priority || 'Medium';
+        ticketData.description = userMessage;
+        
+        // Show extracted information and ask for confirmation
+        showTicketPreview();
+      } catch (err) {
+        typingIndicator.classList.add('hidden');
+        console.error('Error analyzing ticket:', err);
+        // Fallback to manual entry
+        askForTicketSubject();
+      }
+    }
+
+    function showTicketPreview() {
+      const previewHTML = `
+        **Here's the ticket I've prepared for you:**
+        
+        📋 **Subject**: ${ticketData.subject || 'Not specified'}
+        🏷️ **Category**: ${ticketData.category || 'General'}
+        ⚡ **Priority**: ${ticketData.priority || 'Medium'}
+        📝 **Description**: ${ticketData.description}
+        
+        Is this information correct?
+      `;
+      
+      const followups = [
+        { label: '✅ Yes, submit this ticket', payload: { type: 'action', action: 'submit_ticket' } },
+        { label: '✏️ Edit subject', payload: { type: 'action', action: 'edit_subject' } },
+        { label: '🏷️ Change category', payload: { type: 'action', action: 'edit_category' } },
+        { label: '⚡ Change priority', payload: { type: 'action', action: 'edit_priority' } },
+        { label: '❌ Cancel', payload: { type: 'action', action: 'cancel_ticket' } }
+      ];
+      
+      appendMessage('bot', previewHTML, { followups });
+    }
+
+    function askForTicketSubject() {
+      appendMessage('bot', "What should be the subject of your ticket?");
+      ticketStep = 1; // Waiting for subject
+    }
+
+    function askForTicketCategory() {
+      const categoryOptions = [
+        { label: '💻 Technical Support', payload: { type: 'action', action: 'set_category', value: 'Technical Support' } },
+        { label: '📚 Academic', payload: { type: 'action', action: 'set_category', value: 'Academic' } },
+        { label: '💰 Financial', payload: { type: 'action', action: 'set_category', value: 'Financial' } },
+        { label: '🏠 Housing', payload: { type: 'action', action: 'set_category', value: 'Housing' } },
+        { label: '📝 Registration', payload: { type: 'action', action: 'set_category', value: 'Registration' } },
+        { label: '🔧 Other', payload: { type: 'action', action: 'set_category', value: 'Other' } }
+      ];
+      
+      appendMessage('bot', "Please select a category for your ticket:", { followups: categoryOptions });
+    }
+
+    function askForTicketPriority() {
+      const priorityOptions = [
+        { label: '🔴 High', payload: { type: 'action', action: 'set_priority', value: 'High' } },
+        { label: '🟡 Medium', payload: { type: 'action', action: 'set_priority', value: 'Medium' } },
+        { label: '🟢 Low', payload: { type: 'action', action: 'set_priority', value: 'Low' } }
+      ];
+      
+      appendMessage('bot', "What's the priority of this issue?", { followups: priorityOptions });
+    }
+
+    async function submitTicket() {
+      typingIndicator.classList.remove('hidden');
+      
+      try {
+        const res = await fetch('/api/tickets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(ticketData)
+        });
+        
+        typingIndicator.classList.add('hidden');
+        
+        if (res.ok) {
+          const result = await res.json();
+          appendMessage('bot', `✅ **Ticket created successfully!**\n\nYour ticket ID is: **${result.ticket_id}**\n\nYou can track its status in your student dashboard. An admin will review and assign it to the appropriate staff member soon.`);
+          
+          // Reset ticket data
+          ticketData = {};
+          ticketStep = 0;
+        } else {
+          appendMessage('bot', '❌ Sorry, there was an error creating your ticket. Please try again or contact support directly.');
+        }
+      } catch (err) {
+        typingIndicator.classList.add('hidden');
+        console.error('Error submitting ticket:', err);
+        appendMessage('bot', '❌ Sorry, there was an error creating your ticket. Please try again or contact support directly.');
+      }
+    }
+
+    // ---------- Escalation flow ----------
+    async function escalateSession() {
+      const res = await fetch(`/api/chat/${sessionId}/escalate`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to escalate');
+    }
+
+    function enterLiveChatUI() {
+      isLiveChat = true;
+      endLiveBtn.classList.remove('hidden');
+      appendMessage('system', 'Connecting with live support team…');
+    }
+
+    function removeLiveChatCTA() {
+      document.querySelectorAll('#start-live-chat').forEach(btn => {
+        const wrap = btn.parentElement;
+        if (wrap) wrap.remove(); else btn.remove();
+      });
+    }
+
+    function leaveLiveChatUI() {
+      isLiveChat = false;
+      endLiveBtn.classList.add('hidden');
+      liveStatus.classList.add('hidden');
+      stopQueueTimer();
+      appendMessage('system', 'Live chat ended. You can continue with the assistant.');
+    }
+
+    async function onFollowupClick(sug) {
+      if (sug?.payload?.type === 'faq' && sug.payload.query) {
+        appendMessage('user', sug.payload.query);
+        await sendToBot(sug.payload.query);
+      } else if (sug?.payload?.type === 'action') {
+        // Handle ticket creation actions
+        if (sug.payload.action === 'submit_ticket') {
+          await submitTicket();
+        } else if (sug.payload.action === 'edit_subject') {
+          askForTicketSubject();
+        } else if (sug.payload.action === 'edit_category') {
+          askForTicketCategory();
+        } else if (sug.payload.action === 'edit_priority') {
+          askForTicketPriority();
+        } else if (sug.payload.action === 'set_category') {
+          ticketData.category = sug.payload.value;
+          appendMessage('user', sug.payload.value);
+          showTicketPreview();
+        } else if (sug.payload.action === 'set_priority') {
+          ticketData.priority = sug.payload.value;
+          appendMessage('user', sug.payload.value);
+          showTicketPreview();
+        } else if (sug.payload.action === 'cancel_ticket') {
+          ticketData = {};
+          ticketStep = 0;
+          appendMessage('bot', 'Ticket creation cancelled. How else can I help you?');
+        } else if (sug.payload.action === 'escalate') {
+          try {
+            await escalateSession();         // 1) mark queued
+            connectStudentSocket();          // 2) open WS
+            startQueueTimer(120);            // 3) show countdown
+            enterLiveChatUI();               // 4) flip UI state
+          } catch (e) {
+            console.error(e);
+            alert('Unable to start live chat right now. Please try again.');
+          }
+        }
+      }
+    }
+
+    // ---------- Live chat send ----------
+    function sendToLiveChat(text) {
+      try {
+        if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error('WS not open');
+        ws.send(JSON.stringify({ message: text }));
+      } catch (e) {
+        appendMessage('system', 'Could not send message. Please try again.');
+      }
+    }
+
+    // ---------- Send button / input ----------
+    async function onSend() {
+      const text = chatInput.value.trim();
+      if (!text) return;
+
+      if (isLiveChat) {
+        appendMessage('user', text);
+        chatInput.value = '';
+        sendToLiveChat(text);
+        return;
+      }
+
+      // Bot mode - check if we're in ticket creation flow
+      if (ticketStep === 1) {
+        // User is providing subject
+        ticketData.subject = text;
+        appendMessage('user', text);
+        chatInput.value = '';
+        ticketStep = 0;
+        showTicketPreview();
+        return;
+      }
+
+      // Normal bot interaction
+      appendMessage('user', text);
+      chatInput.value = '';
+      await sendToBot(text);
+    }
+    sendBtn.addEventListener('click', onSend);
+    chatInput.addEventListener('keypress', (e) => (e.key === 'Enter') && onSend());
+
+    // Escalate via legacy CTA button (if rendered)
+    document.addEventListener('click', async (e) => {
+      if (e.target && e.target.id === 'start-live-chat') {
+        e.preventDefault();
+        e.target.setAttribute('disabled', 'disabled');
+        removeLiveChatCTA();
+        try {
+          await escalateSession();
+          connectStudentSocket();
+          startQueueTimer(120);
+          enterLiveChatUI();
+        } catch (err) {
+          console.error(err);
+          alert('Unable to start live chat right now. Please try again.');
+        }
+      }
+    });
+
+    // End live chat
+    endLiveBtn.addEventListener('click', async () => {
+      try { await fetch(`/api/chat/${sessionId}/end`, { method: 'POST' }); } catch {}
+      // optionally close socket
+      try { ws?.close(); } catch {}
+      leaveLiveChatUI();
+    });
+
+
+    // Clear transcript
+    clearChat.addEventListener('click', () => {
+      chatWindow.innerHTML = `
+        <div class="flex items-start space-x-3">
+          <div class="w-10 h-10 bg-tamuccTeal rounded-full flex items-center justify-center text-white font-bold">S</div>
+          <div class="bg-white px-4 py-2 rounded-2xl shadow text-gray-800 max-w-[70%]">
+            👋 Hi! I’m <strong>SmartAssist</strong>. How can I help you today?
+          </div>
+        </div>`;
+      typingIndicator.classList.add('hidden');
+      stopQueueTimer();
+      liveStatus.classList.add('hidden');
+    });
+  </script>
+</body>
+</html>
