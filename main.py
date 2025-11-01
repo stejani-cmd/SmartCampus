@@ -593,3 +593,65 @@ def save_appointment(appt: dict, attachment: UploadFile | None = None):
 
     result = db.appointments.insert_one(appt)
     inserted_id = result.inserted_id
+
+# Cancel an appointment
+
+
+@app.post("/api/appointments/cancel/{appointment_id}")
+async def cancel_appointment(appointment_id: str):
+    try:
+        result = db.appointments.update_one(
+            {"_id": ObjectId(appointment_id)},
+            {"$set": {"status": "Cancelled"}}
+        )
+        if result.modified_count == 1:
+            return {"success": True, "message": "Appointment cancelled successfully."}
+        return {"success": False, "message": "Appointment not found or already cancelled."}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# Reschedule an appointment
+
+
+@app.post("/api/appointments/reschedule/{appointment_id}")
+async def reschedule_appointment(appointment_id: str, new_date: str, new_time: str):
+    try:
+        result = db.appointments.update_one(
+            {"_id": ObjectId(appointment_id)},
+            {"$set": {"date": new_date, "time": new_time,
+                      "status": "Pending Confirmation"}}
+        )
+        if result.modified_count == 1:
+            return {"success": True, "message": "Appointment rescheduled successfully."}
+        return {"success": False, "message": "Appointment not found or could not be rescheduled."}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# Return list of appointments; if upcoming=true, only return date >= today
+@app.get("/api/appointments")
+async def api_appointments(upcoming: bool = False):
+    try:
+        # Exclude cancelled appointments
+        query = {"status": {"$ne": "Cancelled"}}
+        if upcoming:
+            today = date.today().isoformat()
+            query["date"] = {"$gte": today}
+        docs = list(db.appointments.find(
+            query).sort([("date", 1), ("time", 1)]))
+        out = []
+        for d in docs:
+            d["_id"] = str(d["_id"])
+            d["status"] = d.get("status", "Pending")
+            if d["status"] == "Confirmed":
+                appointment_date = datetime.strptime(
+                    d["date"], "%Y-%m-%d").date()
+                days_left = (appointment_date - date.today()).days
+                d["countdown"] = f"In {days_left} days" if days_left > 0 else "Today"
+            d["location_mode"] = d.get("location_mode", "Unknown")
+            if "attachment_id" in d:
+                d["attachment_id"] = str(d["attachment_id"])
+            out.append(d)
+        return {"count": len(out), "appointments": out}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
