@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartAssist | Staff Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins', sans-serif; }
+  body { background:#f5f7fb; }
+
+  /* Navbar */
+  nav {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:1rem 2rem; background:#0067A5; color:#fff; position:sticky; top:0; z-index:1000;
+    box-shadow:0 2px 10px rgba(0,0,0,0.1);
+  }
+  nav h1 { font-size:1.6rem; font-weight:600; }
+  nav .nav-links a {
+    color:#fff; text-decoration:none; margin-left:1.5rem; font-weight:500;
+    transition:0.3s;
+  }
+  nav .nav-links a:hover { color:#00A99D; }
+
+  /* Container */
+  .container { display:flex; min-height:calc(100vh - 70px); }
+
+  .sidebar {
+    width:250px; background:#fff; padding:2rem 1rem; border-right:1px solid #e0e0e0;
+    display:flex; flex-direction:column; gap:1.5rem; position:sticky; top:70px;
+  }
+  .sidebar a {
+    text-decoration:none; color:#0067A5; font-weight:500; padding:0.8rem 1rem; border-radius:8px;
+    transition:0.3s; display:flex; align-items:center; gap:0.8rem;
+  }
+  .sidebar a:hover { background:#00A99D; color:#fff; }
+
+  .content { flex:1; padding:2rem; display:flex; flex-direction:column; gap:2rem; }
+
+  /* Hero Section */
+  .hero {
+    background:#00A99D; color:#fff; padding:2rem; border-radius:16px;
+    display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;
+    box-shadow:0 4px 20px rgba(0,0,0,0.1);
+  }
+  .hero h2 { font-size:1.8rem; margin-bottom:0.5rem; }
+  .hero p { font-size:1rem; opacity:0.9; }
+  .hero img { width:200px; max-width:100%; }
+
+  /* Stats Widgets */
+  .stats { display:flex; gap:1rem; flex-wrap:wrap; }
+  .stat {
+    flex:1; min-width:180px; background:#fff; padding:1rem 1.5rem;
+    border-radius:12px; display:flex; align-items:center; justify-content:space-between;
+    box-shadow:0 6px 20px rgba(0,0,0,0.05); transition:0.3s;
+  }
+  .stat:hover { transform:translateY(-5px); box-shadow:0 10px 25px rgba(0,0,0,0.15); }
+  .stat .number { font-size:1.5rem; font-weight:600; color:#0067A5; }
+  .stat .label { font-size:0.9rem; color:#555; }
+
+  /* Ticket Table */
+  .table-container { background:#fff; border-radius:16px; padding:1.5rem; box-shadow:0 6px 20px rgba(0,0,0,0.05); overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { padding:0.8rem; text-align:left; }
+  th { background:#0067A5; color:#fff; border-radius:8px; }
+  tr { border-bottom:1px solid #e0e0e0; transition:0.3s; }
+  tr:hover { background:#f0f8ff; }
+
+  .btn { padding:0.4rem 0.8rem; border:none; border-radius:8px; cursor:pointer; font-size:0.85rem; transition:0.3s; }
+  .btn-respond { background:#00A99D; color:#fff; }
+  .btn-respond:hover { background:#0067A5; }
+
+  /* Chatbot Button */
+  .chatbot-btn {
+    position:fixed; bottom:25px; right:25px; background:#0067A5; color:#fff;
+    width:60px; height:60px; border-radius:50%; border:none;
+    font-size:1.8rem; cursor:pointer; box-shadow:0 6px 20px rgba(0,0,0,0.2);
+    transition:0.3s;
+  }
+  .chatbot-btn:hover { background:#00A99D; }
+
+  @media(max-width:768px){
+    .container { flex-direction:column; }
+    .sidebar { width:100%; flex-direction:row; justify-content:space-around; border-right:none; border-bottom:1px solid #e0e0e0; padding:1rem 0.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav>
+  <h1>SmartAssist</h1>
+  <div class="nav-links">
+    <a href="#">Home</a>
+    <a href="#">Tickets</a>
+    <a href="#">Appointments</a>
+    <a href="#">Feedback</a>
+    <a href="login">Logout</a>
+  </div>
+</nav>
+
+<!-- Container -->
+<div class="container">
+
+
+
+  <!-- Content -->
+  <div class="content">
+
+    <!-- Hero -->
+    <div class="hero">
+      <div>
+        <h2>Welcome, Staff 👋</h2>
+        <p>Manage tickets, respond to live chats, and view upcoming appointments efficiently.</p>
+      </div>
+      <img src="https://img.icons8.com/ios/200/ffffff/customer-support.png" alt="Staff Illustration">
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat">
+        <div>
+          <div class="number">5</div>
+          <div class="label">Pending Tickets</div>
+        </div>
+        <i class="fa-solid fa-ticket"></i>
+      </div>
+      <div class="stat">
+        <div>
+          <div class="number">2</div>
+          <div class="label">Active Chats</div>
+        </div>
+        <i class="fa-solid fa-comments"></i>
+      </div>
+      <div class="stat">
+        <div>
+          <div class="number">3</div>
+          <div class="label">Upcoming Appointments</div>
+        </div>
+        <i class="fa-solid fa-calendar-check"></i>
+      </div>
+    </div>
+
+    <!-- Ticket Queue -->
+    <div class="table-container">
+      <h3>Ticket Queue</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Ticket ID</th>
+            <th>Student</th>
+            <th>Category</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>#101</td>
+            <td>John Doe</td>
+            <td>IT Support</td>
+            <td>Pending</td>
+            <td><button class="btn btn-respond">Respond</button></td>
+          </tr>
+          <tr>
+            <td>#102</td>
+            <td>Mary Smith</td>
+            <td>Advising</td>
+            <td>In Progress</td>
+            <td><button class="btn btn-respond">Respond</button></td>
+          </tr>
+          <tr>
+            <td>#103</td>
+            <td>Kevin Lee</td>
+            <td>Library Services</td>
+            <td>Pending</td>
+            <td><button class="btn btn-respond">Respond</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<!-- Chatbot Button -->
+<button class="chatbot-btn"><i class="fa-solid fa-comments"></i></button>
+
+</body>
+</html>
