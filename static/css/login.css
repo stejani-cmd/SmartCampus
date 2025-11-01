@@ -1,0 +1,22 @@
+.login-card {
+  max-width: 400px;
+  padding: 2rem;
+  margin: 0 auto;
+}
+
+.login-btn {
+  width: 100%;
+  background: #0067a5;
+  color: #fff;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: 0.3s;
+  margin-top: 1rem;
+}
+
+.login-btn:hover {
+  background: #00a99d;
+}
