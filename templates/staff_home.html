@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td>${m.title}</td>
         <td>${m.uploaded_by}</td>
         <td>${new Date(m.uploaded_at).toLocaleString()}</td>
-        <td>${m.file_path ? `<a href="${m.file_path}" target="_blank">Open</a>` : ''}</td>
+        <td>${m.file_name ? `<a href="/uploads/${m.file_name}" target="_blank">Open</a>` : (m.external_url ? `<a href="${m.external_url}" target="_blank">Open</a>` : '')}</td>
         <td>
           <button class="btn btn-respond" onclick="deleteMaterial('${m._id}')">Delete</button>
         </td>

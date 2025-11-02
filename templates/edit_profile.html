@@ -483,6 +483,29 @@
       </table>
     </div>
   </div>
+  <!-- Course Materials Section -->
+<div class="registered-classes" id="materials-box" style="margin-top:1.5rem;">
+  <h3><i class="fas fa-file-alt"></i> Course Materials</h3>
+  <div class="table-wrapper">
+    <table id="student-materials-table">
+      <thead>
+        <tr>
+          <th>Course</th>
+          <th>Title</th>
+          <th>Description</th>
+          <th>Uploaded By</th>
+          <th>Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td colspan="5">Loading course materials...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 </div>
 
 <script>
@@ -616,7 +639,8 @@
   document.addEventListener('DOMContentLoaded', () => {
     fetchStudentData().then(() => {
       fetchRegisteredClasses();
-      classes.forEach(cls => {
+      loadStudentMaterials();   // <- here
+   /*    classes.forEach(cls => {
   const row = document.createElement('tr');
   row.innerHTML = `
     <td>${cls.course_details.title || 'N/A'}</td>
@@ -641,10 +665,49 @@
     `;
     tableBody.appendChild(mrow);
   }
-});
+}); */
 
     });
   });
+
+
+  async function loadStudentMaterials() {
+  const tbody = document.querySelector('#student-materials-table tbody');
+  try {
+    const res = await fetch('/api/materials/mine');
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="5">Unable to load materials.</td></tr>';
+      return;
+    }
+    const mats = await res.json();
+
+    if (!mats.length) {
+      tbody.innerHTML = '<tr><td colspan="5">No materials uploaded for your registered courses yet.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = '';
+    mats.forEach(m => {
+      const tr = document.createElement('tr');
+      const linkHtml = m.file_name
+        ? `<a href="/uploads/${m.file_name}" target="_blank">Open</a>`
+        : (m.external_url ? `<a href="${m.external_url}" target="_blank">Open</a>` : '-');
+
+      tr.innerHTML = `
+        <td>${m.course_title || '—'}</td>
+        <td>${m.title || '—'}</td>
+        <td>${m.description || ''}</td>
+        <td>${m.uploaded_by || '—'}</td>
+        <td>${linkHtml}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (err) {
+    console.error(err);
+    tbody.innerHTML = '<tr><td colspan="5">Error loading materials.</td></tr>';
+  }
+}
+
 </script>
 </body>
 </html>
