@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Assignment Checker | SmartCampus</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/common.css') }}">
+
+  <style>
+    .ac-page {
+      display: flex;
+      gap: 1.5rem;
+      min-height: calc(100vh - 160px);
+    }
+
+    .ac-left {
+      width: 46%;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      padding: 1.4rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .ac-right {
+      width: 54%;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .upload-zone {
+      background: #fff;
+      color: #000;
+      border: 1px dashed #bbb;
+      border-radius: 12px;
+      height: 140px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+      text-align: center;
+    }
+
+    .ac-btn {
+      background: #007a78;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: .5rem .9rem;
+      cursor: pointer;
+      font-size: .75rem;
+    }
+
+    .ac-textarea {
+      width: 100%;
+      min-height: 90px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(0, 0, 0, 0.08);
+      color: #fff;
+      padding: .5rem .75rem;
+      resize: vertical;
+    }
+
+    /* PREVIEW (shown before scoring) */
+    .preview-box {
+      flex: 1 1 auto;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      overflow: auto;
+      min-height: 280px;
+      max-height: 380px;
+    }
+
+    .preview-content {
+      padding: 1rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* SCORE (shown after scoring) */
+    .score-panel {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.02);
+      border-radius: 14px;
+      display: none;
+      /* HIDDEN by default */
+      gap: 1.5rem;
+      align-items: center;
+      padding: 1rem 1.3rem;
+    }
+
+    .circle-wrap {
+      position: relative;
+      width: 130px;
+      height: 130px;
+    }
+
+    .circle-bg {
+      stroke: rgba(255, 255, 255, 0.35);
+      stroke-width: 10;
+    }
+
+    .circle-progress {
+      stroke: #fff;
+      stroke-width: 10;
+      stroke-linecap: round;
+      transform-origin: center;
+      transform: rotate(-90deg);
+      transition: stroke-dashoffset .4s ease;
+    }
+
+    .circle-center-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 1.8rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .score-meta {
+      font-size: .8rem;
+    }
+
+    .score-meta .line {
+      margin-bottom: .2rem;
+    }
+
+    .fix-list {
+      background: rgba(0, 0, 0, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: 12px;
+      padding: .75rem .9rem;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
+    .fix-list h4 {
+      margin: 0 0 .5rem 0;
+      font-size: .85rem;
+    }
+
+    @media (max-width: 980px) {
+      .ac-page {
+        flex-direction: column;
+      }
+
+      .ac-left,
+      .ac-right {
+        width: 100%;
+      }
+    }
+
+    /* Navbar */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      background: #0067A5;
+      color: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Brand section: logo + text */
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    nav h1 {
+      font-size: 1.6rem;
+      font-weight: 600;
+    }
+
+    nav .logo {
+      width: 52px;
+      height: 45px;
+      object-fit: contain;
+      padding: 4px;
+    }
+
+
+    /* Links section */
+    nav .nav-links a {
+      color: #fff;
+      text-decoration: none;
+      margin-left: 1.5rem;
+      font-weight: 500;
+      transition: 0.3s;
+    }
+
+    nav .nav-links a:hover {
+      color: #00A99D;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Navbar -->
+  <nav>
+    <div class="nav-left">
+      <img src="{{ url_for('static', path='assets/images/logo.png') }}" alt="SmartCampus Logo" class="logo">
+      <h1>SmartCampus</h1>
+    </div>
+
+    <div class="nav-links">
+      <a href="/">Home</a>
+
+      {% if request.session.get('user') %}
+      {% set u = request.session.get('user') %}
+
+      {# role-aware dashboard link #}
+      {% if u.role == 'student' %}
+      <a href="/student_home">Dashboard</a>
+      {% elif u.role == 'staff' %}
+      <a href="/staff_home">Dashboard</a>
+      {% elif u.role == 'admin' %}
+      <a href="/admin_home">Dashboard</a>
+      {% endif %}
+
+      <a href="/forum">Community</a>
+      <a href="/edit_profile">
+        Profile
+      </a>
+      <a href="/logout">Logout</a>
+      {% else %}
+      <a href="/login">Portal</a>
+      {% endif %}
+    </div>
+  </nav>
+
+  <!-- page -->
+  <div class="ac-page">
+    <div class="ac-left">
+      <div>
+        <h2>Assignment Checker</h2>
+        <p style=" opacity:.7;">Upload your document and check against professor requirements.</p>
+      </div>
+
+      <div class="upload-zone" id="uploadZone">
+        <span>Drop file here or</span>
+        <button class="ac-btn" id="pickFileBtn" type="button">Browse</button>
+        <small style="font-size:.65rem; color:#555;">.txt, .pdf, .doc, .docx, .png, .jpg</small>
+        <input type="file" id="fileInput" style="display:none;" accept=".txt,.pdf,.doc,.docx,.png,.jpg,.jpeg,.webp" />
+      </div>
+
+      <div>
+        <label style=" font-weight:600;" for="req">Professor requirements</label>
+        <textarea id="req" class="ac-textarea" placeholder="include presentation
+include appointment scheduling
+font size 15"></textarea>
+      </div>
+
+      <div>
+        <label style=" font-weight:600;" for="studentText">Paste student text (optional)</label>
+        <textarea id="studentText" class="ac-textarea"
+          placeholder="Paste assignment text here if file cannot be read."></textarea>
+      </div>
+
+      <button class="ac-btn" id="scoreBtn" type="button" style="width: fit-content;">Calculate score</button>
+
+      <div class="fix-list" id="fixList">
+        <h4>What to fix</h4>
+        <p style="font-size:.7rem; opacity:.8;">Run a check to see missing items.</p>
+      </div>
+    </div>
+
+    <div class="ac-right">
+      <!-- PREVIEW (before submit) -->
+      <div class="preview-box" id="previewBox">
+        <div class="preview-content" id="previewContent">
+          <h3 style="margin-bottom:.25rem;">File preview</h3>
+          <p style="font-size:.7rem; opacity:.8;">No file uploaded yet.</p>
+        </div>
+      </div>
+
+      <!-- SCORE (after submit) -->
+      <div class="score-panel" id="scorePanel">
+        <div class="circle-wrap">
+          <svg width="130" height="130">
+            <circle class="circle-bg" cx="65" cy="65" r="50" fill="none"></circle>
+            <circle class="circle-progress" id="circleProgress" cx="65" cy="65" r="50" fill="none"
+              stroke-dasharray="314" stroke-dashoffset="314"></circle>
+          </svg>
+          <div class="circle-center-text" id="scoreText">0%</div>
+        </div>
+        <div class="score-meta">
+          <div class="line" id="reqMatched">Requirements matched: -- / --</div>
+          <div class="line" id="reqMissing">Missing: --</div>
+          <div class="line" id="plag">--% plagiarism</div>
+          <div class="line" id="fmt">--% formatting</div>
+          <div style="font-size:.65rem; opacity:.7; margin-top:.35rem;">Based on professor requirements.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- footer -->
+  <footer>
+    &copy; {{ now().year if now is defined else "2025" }} SmartCampus. All rights reserved.
+  </footer>
+
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const pickFileBtn = document.getElementById("pickFileBtn");
+    const uploadZone = document.getElementById("uploadZone");
+    const previewContent = document.getElementById("previewContent");
+    const previewBox = document.getElementById("previewBox") || document.querySelector(".preview-box");
+    const scorePanel = document.getElementById("scorePanel") || document.querySelector(".score-panel");
+
+    const scoreBtn = document.getElementById("scoreBtn");
+    const reqText = document.getElementById("req");
+    const studentText = document.getElementById("studentText");
+    const circleProgress = document.getElementById("circleProgress");
+    const scoreText = document.getElementById("scoreText");
+    const plag = document.getElementById("plag");
+    const fmt = document.getElementById("fmt");
+    const fixList = document.getElementById("fixList");
+    const reqMatched = document.getElementById("reqMatched");
+    const reqMissing = document.getElementById("reqMissing");
+
+    // adjust this if your API is different
+    const API_URL = "/api/assignment-checker/score";
+
+    // ----- file pick -----
+    pickFileBtn.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (file) showLocalPreview(file);
+    });
+
+    // ----- drag & drop -----
+    uploadZone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      uploadZone.style.borderColor = "#007a78";
+    });
+    uploadZone.addEventListener("dragleave", () => {
+      uploadZone.style.borderColor = "#bbb";
+    });
+    uploadZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      uploadZone.style.borderColor = "#bbb";
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+        showLocalPreview(file);
+      }
+    });
+
+    function showLocalPreview(file) {
+      const name = file.name;
+      const type = file.type;
+      previewContent.innerHTML = `<h3 style="margin-bottom:.25rem;">${name}</h3>`;
+
+      if (type.startsWith("image/")) {
+        const img = document.createElement("img");
+        img.src = URL.createObjectURL(file);
+        img.style.maxWidth = "100%";
+        img.style.borderRadius = "6px";
+        previewContent.appendChild(img);
+      } else if (type === "application/pdf") {
+        const iframe = document.createElement("iframe");
+        iframe.src = URL.createObjectURL(file);
+        iframe.style.width = "100%";
+        iframe.style.height = "380px";
+        iframe.style.border = "none";
+        previewContent.appendChild(iframe);
+      } else {
+        previewContent.innerHTML += `<p style="font-size:.7rem;">Preview not available for this file type.</p>`;
+      }
+
+      // show preview, hide score
+      if (previewBox) previewBox.style.display = "block";
+      if (scorePanel) scorePanel.style.display = "none";
+    }
+
+    // ----- scoring -----
+    scoreBtn.addEventListener("click", async () => {
+      const reqVal = reqText.value.trim();
+      if (!reqVal) {
+        alert("Please add professor requirements first.");
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append("requirements", reqVal);
+
+      if (studentText.value.trim()) {
+        fd.append("student_text", studentText.value.trim());
+      }
+
+      if (fileInput.files && fileInput.files[0]) {
+        fd.append("file", fileInput.files[0], fileInput.files[0].name);
+      }
+
+      const res = await fetch(API_URL, {
+        method: "POST",
+        body: fd
+      });
+
+      if (!res.ok) {
+        alert("Could not process document.");
+        return;
+      }
+
+      const data = await res.json();
+      renderResult(data);
+    });
+
+    function renderResult(data) {
+      // hide preview, show score
+      if (previewBox) previewBox.style.display = "none";
+      if (scorePanel) scorePanel.style.display = "flex";
+
+      updateScore(data.score ?? 0);
+      if (plag) plag.textContent = (data.plagiarism ?? "--") + "% plagiarism";
+      if (fmt) fmt.textContent = (data.formatting ?? "--") + "% formatting";
+
+      const totalReq = data.requirements_count ?? 0;
+      const details = data.details ?? [];
+      const failed = details.filter(d => !d.passed).length;
+      const passed = totalReq - failed;
+
+      if (reqMatched) reqMatched.textContent = `Requirements matched: ${passed} / ${totalReq}`;
+      if (reqMissing) reqMissing.textContent = `Missing: ${failed}`;
+
+      renderFixList(data);
+    }
+
+    function updateScore(score) {
+      const radius = 50;
+      const circumference = 2 * Math.PI * radius;
+      const offset = circumference - (score / 100) * circumference;
+      circleProgress.style.strokeDasharray = circumference;
+      circleProgress.style.strokeDashoffset = offset;
+      scoreText.textContent = score + "%";
+    }
+
+    function renderFixList(data) {
+      const feedback = data.feedback || {};
+      let html = "<h4>What to fix</h4>";
+
+      if (data.dominant_font_size || data.dominant_font_name) {
+        html += `<p style="font-size:.7rem; opacity:.8;">Detected: ${data.dominant_font_size ? data.dominant_font_size + "pt" : "?"} ${data.dominant_font_name ? "(" + data.dominant_font_name + ")" : ""}</p>`;
+      }
+
+      if (feedback.to_fix && feedback.to_fix.length) {
+        html += "<ul style='padding-left:1rem;'>";
+        feedback.to_fix.forEach(item => {
+          html += `<li style="font-size:.7rem; margin-bottom:.25rem;">${item}</li>`;
+        });
+        html += "</ul>";
+      } else {
+        html += "<p style='font-size:.7rem;'>All requirements satisfied 🎉</p>";
+      }
+
+      if (feedback.met && feedback.met.length) {
+        html += "<h4 style='margin-top:.5rem;'>Met</h4><ul style='padding-left:1rem;'>`";
+        feedback.met.forEach(item => {
+          html += `<li style="font-size:.7rem; margin-bottom:.25rem;">${item}</li>`;
+        });
+        html += "</ul>";
+      }
+
+      if (feedback.notes && feedback.notes.length) {
+        html += "<h4 style='margin-top:.5rem;'>Notes</h4><ul style='padding-left:1rem;'>";
+        feedback.notes.forEach(n => {
+          html += `<li style="font-size:.7rem; margin-bottom:.25rem;">${n}</li>`;
+        });
+        html += "</ul>";
+      }
+
+      fixList.innerHTML = html;
+    }
+
+    // init
+    updateScore(0);
+  </script>
+</body>
+
+</html>

@@ -1,121 +1,233 @@
-{% extends "base.html" %}
-{% block title %}Discussion | SmartCampus{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
 
-{% block extra_css %}
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: {
-          tamuccBlue: '#003366',
-          tamuccTeal: '#007A78',
-          tamuccLight: '#00AEEF',
-          tamuccGray: '#F4F7FA',
+<head>
+  <meta charset="UTF-8">
+  <title>Discussion | SmartCampus</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            tamuccBlue: '#003366',
+            tamuccTeal: '#007A78',
+            tamuccLight: '#00AEEF',
+            tamuccGray: '#F4F7FA',
+          }
         }
       }
     }
-  }
-</script>
-{% endblock %}
+  </script>
 
-{% block content %}
-<div
-  class="min-h-[calc(100vh-60px)] bg-gradient-to-br from-tamuccBlue via-tamuccTeal to-tamuccLight flex justify-center py-6 px-4">
-  <div
-    class="w-full max-w-5xl bg-white/85 backdrop-blur-md rounded-2xl shadow-2xl border border-white/30 flex flex-col">
-    <!-- header -->
-    <div class="flex items-center justify-between px-6 py-4 border-b border-white/40">
-      <div>
-        <p class="text-xs text-gray-500 mb-1">Community discussion</p>
-        <h1 class="text-lg font-semibold text-tamuccBlue">{{ post.title }}</h1>
-        <div class="flex gap-2 items-center mt-1 text-[11px] text-gray-500">
-          <span>by {{ post.author_name or "Student" }}</span>
-          {% if post.created_at %}
-          <span>• {{ post.created_at.strftime('%b %d, %Y %H:%M') }}</span>
-          {% endif %}
-          {% if post.category_slug %}
-          <span class="px-2 py-0.5 bg-tamuccTeal/10 text-tamuccTeal rounded-full text-[10px]">
-            {{ post.category_slug }}
-          </span>
-          {% endif %}
-          {% if post.views %}
-          <span>{{ post.views }} views</span>
-          {% endif %}
-        </div>
-      </div>
-      <a href="/forum" class="text-xs text-tamuccBlue hover:underline">← Back to forum</a>
+  <style>
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #f4f7fa;
+    }
+
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      background: #0067A5;
+      color: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, .1);
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+    }
+
+    nav h1 {
+      font-size: 1.6rem;
+      font-weight: 600;
+    }
+
+    nav .logo {
+      width: 52px;
+      height: 45px;
+      object-fit: contain;
+      padding: 4px;
+    }
+
+    .nav-links a {
+      color: #fff;
+      text-decoration: none;
+      margin-left: 1.5rem;
+      font-weight: 500;
+      transition: .3s;
+    }
+
+    .nav-links a:hover {
+      color: #00A99D;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- header (was in partials/header.html earlier) -->
+  <nav>
+    <div class="nav-left">
+      <img src="{{ url_for('static', path='assets/images/logo.png') }}" alt="SmartCampus Logo" class="logo">
+      <h1>SmartCampus</h1>
     </div>
 
-    <!-- content -->
-    <div class="grid grid-cols-12 gap-6 p-6">
-      <!-- main -->
-      <div class="col-span-12 md:col-span-8 space-y-4">
-        <!-- post body -->
-        <div class="bg-white/70 border border-gray-100 rounded-xl p-4">
-          <p class="text-sm text-gray-700 whitespace-pre-line">{{ post.body or "" }}</p>
-          {% if post.tags %}
-          <div class="flex gap-2 mt-3 flex-wrap">
-            {% for t in post.tags %}
-            <span class="px-2 py-0.5 bg-gray-100 rounded-full text-[11px] text-gray-700">{{ t }}</span>
-            {% endfor %}
+    <div class="nav-links">
+      <a href="/">Home</a>
+
+      {% if request.session.get('user') %}
+      {% set u = request.session.get('user') %}
+
+      {# role-aware dashboard link #}
+      {% if u.role == 'student' %}
+      <a href="/student_home">Dashboard</a>
+      {% elif u.role == 'staff' %}
+      <a href="/staff_home">Dashboard</a>
+      {% elif u.role == 'admin' %}
+      <a href="/admin_home">Dashboard</a>
+      {% endif %}
+
+      <a href="/forum">Community</a>
+      <a href="/edit_profile">
+        Profile
+      </a>
+      <a href="/logout">Logout</a>
+      {% else %}
+      <a href="/login">Portal</a>
+      {% endif %}
+    </div>
+  </nav>
+
+  <!-- main -->
+  <main class="flex-1">
+    <div
+      class="min-h-[calc(100vh-60px)] bg-gradient-to-br from-tamuccBlue via-tamuccTeal to-tamuccLight flex justify-center py-6 px-4">
+      <div
+        class="w-full max-w-5xl bg-white/85 backdrop-blur-md rounded-2xl shadow-2xl border border-white/30 flex flex-col">
+        <!-- header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-white/40">
+          <div>
+            <p class="text-xs text-gray-500 mb-1">Community discussion</p>
+            <h1 class="text-lg font-semibold text-tamuccBlue">{{ post.title }}</h1>
+            <div class="flex gap-2 items-center mt-1 text-[11px] text-gray-500">
+              <span>by {{ post.author_name or "Student" }}</span>
+              {% if post.created_at %}
+              <span>• {{ post.created_at.strftime('%b %d, %Y %H:%M') }}</span>
+              {% endif %}
+              {% if post.category_slug %}
+              <span class="px-2 py-0.5 bg-tamuccTeal/10 text-tamuccTeal rounded-full text-[10px]">
+                {{ post.category_slug }}
+              </span>
+              {% endif %}
+              {% if post.views %}
+              <span>{{ post.views }} views</span>
+              {% endif %}
+            </div>
           </div>
-          {% endif %}
+          <a href="/forum" class="text-xs text-tamuccBlue hover:underline">← Back to forum</a>
         </div>
 
-        <!-- replies -->
-        <div class="space-y-3">
-          <h2 class="text-sm font-semibold text-tamuccBlue">{{ comments|length }} Replies</h2>
-          {% for c in comments %}
-          <div class="flex gap-3">
-            <div
-              class="w-9 h-9 bg-tamuccTeal text-white rounded-full flex items-center justify-center text-xs font-bold">
-              {{ (c.author_name or "S")[:1] }}
-            </div>
-            <div class="flex-1 bg-white/70 border border-gray-100 rounded-xl p-3">
-              <div class="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                <span class="font-semibold text-gray-700">{{ c.author_name or "Student" }}</span>
-                {% if c.created_at %}
-                <span>{{ c.created_at.strftime('%b %d, %Y %H:%M') }}</span>
-                {% endif %}
+        <!-- content -->
+        <div class="grid grid-cols-12 gap-6 p-6">
+          <!-- main -->
+          <div class="col-span-12 md:col-span-8 space-y-4">
+            <!-- post body -->
+            <div class="bg-white/70 border border-gray-100 rounded-xl p-4">
+              <p class="text-sm text-gray-700 whitespace-pre-line">{{ post.body or "" }}</p>
+              {% if post.tags %}
+              <div class="flex gap-2 mt-3 flex-wrap">
+                {% for t in post.tags %}
+                <span class="px-2 py-0.5 bg-gray-100 rounded-full text-[11px] text-gray-700">{{ t }}</span>
+                {% endfor %}
               </div>
-              <p class="text-sm text-gray-700">{{ c.body }}</p>
+              {% endif %}
+            </div>
+
+            <!-- replies -->
+            <div class="space-y-3">
+              <h2 class="text-sm font-semibold text-tamuccBlue">{{ comments|length }} Replies</h2>
+              {% for c in comments %}
+              <div class="flex gap-3">
+                <div
+                  class="w-9 h-9 bg-tamuccTeal text-white rounded-full flex items-center justify-center text-xs font-bold">
+                  {{ (c.author_name or "S")[:1] }}
+                </div>
+                <div class="flex-1 bg-white/70 border border-gray-100 rounded-xl p-3">
+                  <div class="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                    <span class="font-semibold text-gray-700">{{ c.author_name or "Student" }}</span>
+                    {% if c.created_at %}
+                    <span>{{ c.created_at.strftime('%b %d, %Y %H:%M') }}</span>
+                    {% endif %}
+                  </div>
+                  <p class="text-sm text-gray-700">{{ c.body }}</p>
+                </div>
+              </div>
+              {% else %}
+              <p class="text-xs text-gray-500">No replies yet. Be the first 👇</p>
+              {% endfor %}
+            </div>
+
+            <!-- reply box -->
+            <div class="bg-white/70 border border-gray-100 rounded-xl p-4">
+              <h3 class="text-sm font-semibold text-tamuccBlue mb-2">Reply</h3>
+              <form method="post" action="/forum/{{ post._id }}/comment" class="space-y-2">
+                <textarea name="body" rows="3" required
+                  class="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tamuccTeal/70"
+                  placeholder="Write your reply..."></textarea>
+                <button type="submit"
+                  class="bg-tamuccTeal text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-tamuccLight transition">
+                  Post reply
+                </button>
+              </form>
             </div>
           </div>
-          {% else %}
-          <p class="text-xs text-gray-500">No replies yet. Be the first 👇</p>
-          {% endfor %}
-        </div>
 
-        <!-- reply box -->
-        <div class="bg-white/70 border border-gray-100 rounded-xl p-4">
-          <h3 class="text-sm font-semibold text-tamuccBlue mb-2">Reply</h3>
-          <form method="post" action="/forum/{{ post._id }}/comment" class="space-y-2">
-            <textarea name="body" rows="3" required
-              class="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tamuccTeal/70"
-              placeholder="Write your reply..."></textarea>
-            <button type="submit"
-              class="bg-tamuccTeal text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-tamuccLight transition">
-              Post reply
-            </button>
-          </form>
-        </div>
-      </div>
+          <!-- side -->
+          <div class="col-span-12 md:col-span-4 space-y-3">
+            <div class="bg-white/65 border border-gray-100 rounded-xl p-4">
+              <h3 class="text-sm font-semibold text-tamuccBlue mb-2">Categories</h3>
+              <ul class="space-y-1 text-sm">
+                {% for c in categories %}
+                <li>
+                  <a href="/forum?category={{ c.slug }}" class="text-gray-700 hover:underline">{{ c.name }}</a>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
 
-      <!-- side -->
-      <div class="col-span-12 md:col-span-4 space-y-3">
-        <div class="bg-white/65 border border-gray-100 rounded-xl p-4">
-          <h3 class="text-sm font-semibold text-tamuccBlue mb-2">Categories</h3>
-          <ul class="space-y-1 text-sm">
-            {% for c in categories %}
-            <li>
-              <a href="/forum?category={{ c.slug }}" class="text-gray-700 hover:underline">{{ c.name }}</a>
-            </li>
-            {% endfor %}
-          </ul>
+            <!-- optional: related posts -->
+            {#
+            <div class="bg-white/65 border border-gray-100 rounded-xl p-4">
+              <h3 class="text-sm font-semibold text-tamuccBlue mb-2">Related</h3>
+              <ul class="space-y-1 text-xs text-gray-600">
+                <li><a href="#" class="hover:underline">Wi-Fi slow in Block B?</a></li>
+                <li><a href="#" class="hover:underline">How to raise IT ticket?</a></li>
+              </ul>
+            </div>
+            #}
+          </div>
         </div>
       </div>
     </div>
-  </div>
-</div>
-{% endblock %}
+  </main>
+
+  <!-- footer -->
+  <footer class="bg-[#0f172a] text-white text-center py-4 text-sm mt-6">
+    &copy; {{ now().year if now is defined else "2025" }} SmartCampus. All rights reserved.
+  </footer>
+</body>
+
+</html>

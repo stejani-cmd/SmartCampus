@@ -26,6 +26,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel, ValidationError
 import logging
 from app.utils import get_current_user
+from app.routers import assignment_checker
+from app.routers import assignment_checker
 
 from app.routers import auth, pages, forum
 from app.core.config import settings
@@ -74,6 +76,7 @@ def extract_pdf_text(path: str) -> str:
 app.include_router(pages.router)
 app.include_router(auth.router)
 app.include_router(forum.router)
+app.include_router(assignment_checker.router)
 
 # Configure OAuth for Google
 oauth = OAuth()
@@ -713,7 +716,6 @@ async def post_register(
     email: str = Form(...),
     password: str = Form(...),
     confirm_password: str = Form(...),
-    role: str = Form(...)           # keep required (see form below)
 ):
     if password != confirm_password:
         return templates.TemplateResponse(
@@ -731,7 +733,7 @@ async def post_register(
         "full_name": full_name,
         "email": email,
         "password": password,       # TODO: hash this
-        "role": role
+        "role": "student"           # default role
     })
     return templates.TemplateResponse(
         "login.html",

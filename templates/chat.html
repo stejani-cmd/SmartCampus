@@ -9,7 +9,7 @@
 </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SmartAssist Chat | TAMUCC Campus Assistant</title>
+  <title>SmartCampus Chat | TAMUCC Campus Assistant</title>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -35,11 +35,11 @@
   <header class="backdrop-blur-md bg-white/10 border-b border-white/20 text-white shadow-lg">
     <div class="max-w-6xl mx-auto flex justify-between items-center px-6 py-4">
       <div class="flex items-center space-x-3">
-        <img src="{{ url_for('static', path='assets/images/logo.png') }}"
-          alt="SmartAssist Logo"
-          class="h-10 w-10 object-contain rounded-lg shadow-md border border-gray-200">
+        <img src="{{ url_for('static', path='assets/images/kora.png') }}"
+          alt="SmartCampus Logo"
+          class="h-10 w-10 object-contain rounded-lg shadow-md border-gray-200">
         <div>
-          <h1 class="text-2xl font-semibold tracking-wide"> SmartAssist </h1>
+          <h1 class="text-2xl font-semibold tracking-wide"> SmartCampus </h1>
           <p class="text-xs text-white/70">TAMUCC Campus Assistant</p>
         </div>
       </div>
@@ -72,7 +72,7 @@
       <div class="bg-tamuccTeal text-white px-6 py-4 flex justify-between items-center">
         <div class="flex items-center space-x-2">
           <div class="h-3 w-3 bg-green-400 rounded-full animate-pulse"></div>
-          <h2 class="font-semibold text-lg">SmartAssist Virtual Assistant</h2>
+          <h2 class="font-semibold text-lg">kora Virtual Assistant</h2>
         </div>
         <span id="live-status" class="hidden text-xs bg-white/20 px-2 py-1 rounded">Live chat connected</span>
       </div>
@@ -87,7 +87,7 @@
         <div class="flex items-start space-x-3">
           <div class="w-10 h-10 bg-tamuccTeal rounded-full flex items-center justify-center text-white font-bold">S</div>
           <div class="bg-white px-4 py-2 rounded-2xl shadow text-gray-800 max-w-[70%]">
-            👋 Hi! I’m <strong>SmartAssist</strong>. How can I help you today?
+            👋 Hi! I’m <strong>Kora</strong>. How can I help you today?
           </div>
         </div>
       </div>
@@ -98,7 +98,7 @@
           <span class="dot bg-gray-400 w-2 h-2 rounded-full animate-bounce"></span>
           <span class="dot bg-gray-400 w-2 h-2 rounded-full animate-bounce [animation-delay:0.2s]"></span>
           <span class="dot bg-gray-400 w-2 h-2 rounded-full animate-bounce [animation-delay:0.4s]"></span>
-          <p class="text-sm ml-2">SmartAssist is typing...</p>
+          <p class="text-sm ml-2">SmartCampus is typing...</p>
         </div>
       </div>
 
@@ -807,7 +807,7 @@
         <div class="flex items-start space-x-3">
           <div class="w-10 h-10 bg-tamuccTeal rounded-full flex items-center justify-center text-white font-bold">S</div>
           <div class="bg-white px-4 py-2 rounded-2xl shadow text-gray-800 max-w-[70%]">
-            👋 Hi! I’m <strong>SmartAssist</strong>. How can I help you today?
+            👋 Hi! I’m <strong>SmartCampus</strong>. How can I help you today?
           </div>
         </div>`;
       typingIndicator.classList.add('hidden');
