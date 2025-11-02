@@ -1,665 +1,610 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SmartCampus | Edit Profile</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      font-family: 'Poppins', sans-serif;
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartAssist | Edit Profile</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins', sans-serif; }
+  body { background:#f5f7fb; }
+
+  /* Navbar - Matching student_home.html theme */
+  nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 2rem;
+    background: #0067A5;
+    color: #fff;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  }
+
+  nav h1 {
+    font-size: 1.6rem;
+    font-weight: 600;
+  }
+
+  nav .nav-links a {
+    color: #fff;
+    text-decoration: none;
+    margin-left: 1.5rem;
+    font-weight: 500;
+    transition: 0.3s;
+  }
+
+  nav .nav-links a:hover {
+    color: #00A99D;
+  }
+
+  /* Container - Updated with theme colors */
+  .container {
+    max-width: 1100px;
+    margin: 2rem auto;
+    padding: 0 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  /* Profile Card */
+  .profile-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 2.5rem;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
+    transition: 0.4s;
+  }
+
+  .profile-card:hover {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Header Section */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    margin-bottom: 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 2px solid #f0f0f0;
+    position: relative;
+  }
+
+  .profile-picture-wrapper {
+    position: relative;
+  }
+
+  .header img {
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 4px solid #0067A5;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 103, 165, 0.2);
+    display: block;
+  }
+
+  .header img.editable {
+    cursor: pointer;
+  }
+
+  .header img.editable:hover {
+    transform: scale(1.05);
+    border-color: #00A99D;
+    box-shadow: 0 6px 20px rgba(0, 169, 157, 0.3);
+  }
+
+  .header .edit-icon {
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+    background: #0067A5;
+    color: #fff;
+    border-radius: 50%;
+    padding: 0.6rem;
+    cursor: pointer;
+    font-size: 1rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+  }
+
+  .profile-picture-wrapper:hover .edit-icon {
+    opacity: 1;
+  }
+
+  .header-info {
+    flex: 1;
+  }
+
+  .header h2 {
+    font-size: 2.2rem;
+    font-weight: 600;
+    color: #0067A5;
+    margin-bottom: 0.5rem;
+  }
+
+  .header .email-badge {
+    display: inline-block;
+    background: #f0f8ff;
+    color: #0067A5;
+    padding: 0.4rem 1rem;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  /* Form Styling */
+  form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.8rem;
+  }
+
+  form .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  form .form-group label {
+    font-weight: 600;
+    margin-bottom: 0.6rem;
+    color: #0067A5;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  form .form-group label i {
+    color: #00A99D;
+    font-size: 1rem;
+  }
+
+  form .form-group input,
+  form .form-group select {
+    padding: 0.9rem 1rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    font-size: 1rem;
+    color: #333;
+    background: #f9f9f9;
+    transition: all 0.3s ease;
+  }
+
+  form .form-group input:focus,
+  form .form-group select:focus {
+    outline: none;
+    border-color: #0067A5;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(0, 103, 165, 0.1);
+  }
+
+  form .form-group input:disabled,
+  form .form-group select:disabled {
+    background: #f5f5f5;
+    cursor: not-allowed;
+    color: #666;
+  }
+
+  form .form-group input[readonly] {
+    background: #f0f0f0;
+    cursor: not-allowed;
+  }
+
+  /* Form Actions */
+  .form-actions {
+    grid-column: span 2;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .form-actions button {
+    padding: 0.9rem 2.5rem;
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .form-actions .save-btn {
+    background: #0067A5;
+    color: #fff;
+    box-shadow: 0 4px 15px rgba(0, 103, 165, 0.3);
+  }
+
+  .form-actions .save-btn:hover {
+    background: #00A99D;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 169, 157, 0.4);
+  }
+
+  .form-actions .cancel-btn {
+    background: #fff;
+    color: #666;
+    border: 2px solid #e0e0e0;
+  }
+
+  .form-actions .cancel-btn:hover {
+    background: #f5f5f5;
+    border-color: #ccc;
+  }
+
+  .form-actions .edit-btn {
+    background: #0067A5;
+    color: #fff;
+    box-shadow: 0 4px 15px rgba(0, 103, 165, 0.3);
+  }
+
+  .form-actions .edit-btn:hover {
+    background: #00A99D;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 169, 157, 0.4);
+  }
+
+  /* Registered Classes Section */
+  .registered-classes {
+    background: #fff;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
+  }
+
+  .registered-classes h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: #0067A5;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
+  .registered-classes h3 i {
+    color: #0067A5;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+  }
+
+  .registered-classes table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .registered-classes table th,
+  .registered-classes table td {
+    padding: 1rem;
+    text-align: left;
+  }
+
+  .registered-classes table th {
+    background: #0067A5;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.9rem;
+    border-bottom: 2px solid #00A99D;
+  }
+
+  .registered-classes table th:first-child {
+    border-top-left-radius: 8px;
+  }
+
+  .registered-classes table th:last-child {
+    border-top-right-radius: 8px;
+  }
+
+  .registered-classes table tbody tr {
+    transition: background 0.2s ease;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .registered-classes table tbody tr:hover {
+    background: #f9fcff;
+  }
+
+  .registered-classes table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .registered-classes table td {
+    color: #333;
+    font-size: 0.9rem;
+  }
+
+  /* Empty State */
+  .registered-classes table tbody tr td[colspan="8"] {
+    text-align: center;
+    padding: 2.5rem;
+    color: #999;
+    font-style: italic;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    form {
+      grid-template-columns: 1fr;
     }
 
-    body {
-      background: #f5f7fb;
-    }
-
-    /* Navbar - Matching student_home.html theme */
-    nav {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1rem 2rem;
-      background: #0067A5;
-      color: #fff;
-      position: sticky;
-      top: 0;
-      z-index: 1000;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    }
-
-    nav h1 {
-      font-size: 1.6rem;
-      font-weight: 600;
-    }
-
-    nav .nav-links a {
-      color: #fff;
-      text-decoration: none;
-      margin-left: 1.5rem;
-      font-weight: 500;
-      transition: 0.3s;
-    }
-
-    nav .nav-links a:hover {
-      color: #00A99D;
-    }
-
-    nav {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1rem 2rem;
-      background: #0067A5;
-      color: #fff;
-      position: sticky;
-      top: 0;
-      z-index: 1000;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, .1);
-    }
-
-    .nav-left {
-      display: flex;
-      align-items: center;
-      gap: .75rem;
-    }
-
-    nav h1 {
-      font-size: 1.6rem;
-      font-weight: 600;
-    }
-
-    nav .logo {
-      width: 52px;
-      height: 45px;
-      object-fit: contain;
-      padding: 4px;
-    }
-
-    .nav-links a {
-      color: #fff;
-      text-decoration: none;
-      margin-left: 1.5rem;
-      font-weight: 500;
-      transition: .3s;
-    }
-
-    .nav-links a:hover {
-      color: #00A99D;
-    }
-
-    /* Container - Updated with theme colors */
-    .container {
-      max-width: 1100px;
-      margin: 2rem auto;
-      padding: 0 1.5rem;
-      display: flex;
-      flex-direction: column;
-      gap: 2rem;
-    }
-
-    /* Profile Card */
-    .profile-card {
-      background: #fff;
-      border-radius: 16px;
-      padding: 2.5rem;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
-      transition: 0.4s;
-    }
-
-    .profile-card:hover {
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-    }
-
-    /* Header Section */
     .header {
-      display: flex;
-      align-items: center;
-      gap: 2rem;
-      margin-bottom: 2.5rem;
-      padding-bottom: 2rem;
-      border-bottom: 2px solid #f0f0f0;
-      position: relative;
-    }
-
-    .profile-picture-wrapper {
-      position: relative;
+      flex-direction: column;
+      text-align: center;
     }
 
     .header img {
-      width: 130px;
-      height: 130px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 4px solid #0067A5;
-      transition: all 0.3s ease;
-      box-shadow: 0 4px 15px rgba(0, 103, 165, 0.2);
-      display: block;
+      width: 100px;
+      height: 100px;
     }
 
-    .header img.editable {
-      cursor: pointer;
-    }
-
-    .header img.editable:hover {
-      transform: scale(1.05);
-      border-color: #00A99D;
-      box-shadow: 0 6px 20px rgba(0, 169, 157, 0.3);
-    }
-
-    .header .edit-icon {
-      position: absolute;
-      bottom: 5px;
-      right: 5px;
-      background: #0067A5;
-      color: #fff;
-      border-radius: 50%;
-      padding: 0.6rem;
-      cursor: pointer;
-      font-size: 1rem;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
-    }
-
-    .profile-picture-wrapper:hover .edit-icon {
-      opacity: 1;
-    }
-
-    .header-info {
-      flex: 1;
-    }
-
-    .header h2 {
-      font-size: 2.2rem;
-      font-weight: 600;
-      color: #0067A5;
-      margin-bottom: 0.5rem;
-    }
-
-    .header .email-badge {
-      display: inline-block;
-      background: #f0f8ff;
-      color: #0067A5;
-      padding: 0.4rem 1rem;
-      border-radius: 20px;
-      font-size: 0.9rem;
-      font-weight: 500;
-    }
-
-    /* Form Styling */
-    form {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.8rem;
-    }
-
-    form .form-group {
-      display: flex;
+    .form-actions {
+      grid-column: span 1;
       flex-direction: column;
     }
 
-    form .form-group label {
-      font-weight: 600;
-      margin-bottom: 0.6rem;
-      color: #0067A5;
-      font-size: 0.95rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    form .form-group label i {
-      color: #00A99D;
-      font-size: 1rem;
-    }
-
-    form .form-group input,
-    form .form-group select {
-      padding: 0.9rem 1rem;
-      border: 2px solid #e0e0e0;
-      border-radius: 10px;
-      font-size: 1rem;
-      color: #333;
-      background: #f9f9f9;
-      transition: all 0.3s ease;
-    }
-
-    form .form-group input:focus,
-    form .form-group select:focus {
-      outline: none;
-      border-color: #0067A5;
-      background: #fff;
-      box-shadow: 0 0 0 3px rgba(0, 103, 165, 0.1);
-    }
-
-    form .form-group input:disabled,
-    form .form-group select:disabled {
-      background: #f5f5f5;
-      cursor: not-allowed;
-      color: #666;
-    }
-
-    form .form-group input[readonly] {
-      background: #f0f0f0;
-      cursor: not-allowed;
-    }
-
-    /* Form Actions */
-    .form-actions {
-      grid-column: span 2;
-      display: flex;
-      justify-content: center;
-      gap: 1rem;
-      margin-top: 1rem;
-    }
-
     .form-actions button {
-      padding: 0.9rem 2.5rem;
-      border: none;
-      border-radius: 10px;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .form-actions .save-btn {
-      background: #0067A5;
-      color: #fff;
-      box-shadow: 0 4px 15px rgba(0, 103, 165, 0.3);
-    }
-
-    .form-actions .save-btn:hover {
-      background: #00A99D;
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(0, 169, 157, 0.4);
-    }
-
-    .form-actions .cancel-btn {
-      background: #fff;
-      color: #666;
-      border: 2px solid #e0e0e0;
-    }
-
-    .form-actions .cancel-btn:hover {
-      background: #f5f5f5;
-      border-color: #ccc;
-    }
-
-    .form-actions .edit-btn {
-      background: #0067A5;
-      color: #fff;
-      box-shadow: 0 4px 15px rgba(0, 103, 165, 0.3);
-    }
-
-    .form-actions .edit-btn:hover {
-      background: #00A99D;
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(0, 169, 157, 0.4);
-    }
-
-    /* Registered Classes Section */
-    .registered-classes {
-      background: #fff;
-      border-radius: 16px;
-      padding: 2rem;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
-    }
-
-    .registered-classes h3 {
-      font-size: 1.5rem;
-      font-weight: 600;
-      margin-bottom: 1.5rem;
-      color: #0067A5;
-      display: flex;
-      align-items: center;
-      gap: 0.8rem;
-    }
-
-    .registered-classes h3 i {
-      color: #0067A5;
-    }
-
-    .table-wrapper {
-      overflow-x: auto;
-      border: 1px solid #e0e0e0;
-      border-radius: 10px;
-    }
-
-    .registered-classes table {
       width: 100%;
-      border-collapse: collapse;
     }
 
-    .registered-classes table th,
-    .registered-classes table td {
-      padding: 1rem;
-      text-align: left;
+    nav h1 {
+      font-size: 1.3rem;
     }
 
-    .registered-classes table th {
-      background: #0067A5;
-      color: #fff;
-      font-weight: 600;
-      font-size: 0.9rem;
-      border-bottom: 2px solid #00A99D;
-    }
-
-    .registered-classes table th:first-child {
-      border-top-left-radius: 8px;
-    }
-
-    .registered-classes table th:last-child {
-      border-top-right-radius: 8px;
-    }
-
-    .registered-classes table tbody tr {
-      transition: background 0.2s ease;
-      border-bottom: 1px solid #f0f0f0;
-    }
-
-    .registered-classes table tbody tr:hover {
-      background: #f9fcff;
-    }
-
-    .registered-classes table tbody tr:last-child {
-      border-bottom: none;
-    }
-
-    .registered-classes table td {
-      color: #333;
+    nav .nav-links a {
+      margin-left: 1rem;
       font-size: 0.9rem;
     }
-
-    /* Empty State */
-    .registered-classes table tbody tr td[colspan="8"] {
-      text-align: center;
-      padding: 2.5rem;
-      color: #999;
-      font-style: italic;
-    }
-
-    /* Responsive Design */
-    @media (max-width: 768px) {
-      form {
-        grid-template-columns: 1fr;
-      }
-
-      .header {
-        flex-direction: column;
-        text-align: center;
-      }
-
-      .header img {
-        width: 100px;
-        height: 100px;
-      }
-
-      .form-actions {
-        grid-column: span 1;
-        flex-direction: column;
-      }
-
-      .form-actions button {
-        width: 100%;
-      }
-
-      nav h1 {
-        font-size: 1.3rem;
-      }
-
-      nav .nav-links a {
-        margin-left: 1rem;
-        font-size: 0.9rem;
-      }
-    }
-  </style>
+  }
+</style>
 </head>
-
 <body>
 
-  <!-- Navbar -->
-  <nav>
-    <div class="nav-left">
-      <img src="{{ url_for('static', path='assets/images/logo.png') }}" alt="SmartCampus Logo" class="logo">
-      <h1>SmartCampus</h1>
-    </div>
+<!-- Navbar -->
+<nav>
+  <h1>SmartAssist</h1>
+  <div class="nav-links">
+    <a href="/student_home">Dashboard</a>
+    <a href="/logout">Logout</a>
+  </div>
+</nav>
 
-    <div class="nav-links">
-      <a href="/">Home</a>
-
-      {% if request.session.get('user') %}
-      {% set u = request.session.get('user') %}
-
-      {# role-aware dashboard link #}
-      {% if u.role == 'student' %}
-      <a href="/student_home">Dashboard</a>
-      {% elif u.role == 'staff' %}
-      <a href="/staff_home">Dashboard</a>
-      {% elif u.role == 'admin' %}
-      <a href="/admin_home">Dashboard</a>
-      {% endif %}
-
-      <a href="/forum">Community</a>
-      <a href="/edit_profile">
-        Profile
-      </a>
-      <a href="/logout">Logout</a>
-      {% else %}
-      <a href="/login">Portal</a>
-      {% endif %}
-    </div>
-  </nav>
-
-  <!-- Container -->
-  <div class="container">
-    <!-- Profile Card -->
-    <div class="profile-card">
-      <!-- Header -->
-      <div class="header">
-        <div class="profile-picture-wrapper">
-          <img id="profile-picture" src="static/assets/images/profile-placeholder.png" alt="Profile Picture">
-          <i class="fas fa-camera edit-icon" id="camera-icon"></i>
-          <input type="file" id="profile-picture-input" name="profile_picture" accept="image/*" style="display: none;"
-            onchange="previewProfilePicture(event)">
-        </div>
-        <div class="header-info">
-          <h2 id="full-name">Loading...</h2>
-          <span class="email-badge" id="email-display">Loading email...</span>
-        </div>
+<!-- Container -->
+<div class="container">
+  <!-- Profile Card -->
+  <div class="profile-card">
+    <!-- Header -->
+    <div class="header">
+      <div class="profile-picture-wrapper">
+        <img id="profile-picture" src="static/assets/images/profile-placeholder.png" alt="Profile Picture">
+        <i class="fas fa-camera edit-icon" id="camera-icon"></i>
+        <input type="file" id="profile-picture-input" name="profile_picture" accept="image/*" style="display: none;" onchange="previewProfilePicture(event)">
       </div>
-
-      <!-- Profile Form -->
-      <form id="profile-form">
-        <div class="form-group">
-          <label for="first-name"><i class="fas fa-user"></i> First Name</label>
-          <input type="text" id="first-name" name="first_name" placeholder="Enter your first name" disabled>
-        </div>
-        <div class="form-group">
-          <label for="last-name"><i class="fas fa-user"></i> Last Name</label>
-          <input type="text" id="last-name" name="last_name" placeholder="Enter your last name" disabled>
-        </div>
-        <div class="form-group">
-          <label for="date-of-birth"><i class="fas fa-calendar"></i> Date of Birth</label>
-          <input type="date" id="date-of-birth" name="date_of_birth" disabled>
-        </div>
-        <div class="form-group">
-          <label for="marital-status"><i class="fas fa-heart"></i> Marital Status</label>
-          <select id="marital-status" name="marital_status" disabled>
-            <option value="Single">Single</option>
-            <option value="Married">Married</option>
-            <option value="Divorced">Divorced</option>
-            <option value="Widowed">Widowed</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="legal-sex"><i class="fas fa-venus-mars"></i> Legal Sex</label>
-          <select id="legal-sex" name="legal_sex" disabled>
-            <option value="Male">Male</option>
-            <option value="Female">Female</option>
-            <option value="Other">Other</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="email"><i class="fas fa-envelope"></i> Email</label>
-          <input type="email" id="email" name="email" readonly>
-        </div>
-        <div class="form-group">
-          <label for="phone-number"><i class="fas fa-phone"></i> Phone Number</label>
-          <input type="text" id="phone-number" name="phone_number" placeholder="Enter your phone number" disabled>
-        </div>
-        <div class="form-group">
-          <label for="address"><i class="fas fa-home"></i> Address</label>
-          <input type="text" id="address" name="address" placeholder="Enter your address" disabled>
-        </div>
-
-        <div class="form-actions">
-          <button type="button" class="save-btn" onclick="saveProfile()" style="display: none;">
-            <i class="fas fa-save"></i> Save Changes
-          </button>
-          <button type="button" class="cancel-btn" onclick="cancelEditMode()" style="display: none;">
-            <i class="fas fa-times"></i> Cancel
-          </button>
-          <button type="button" class="edit-btn" onclick="enableEditMode()">
-            <i class="fas fa-edit"></i> Edit Profile
-          </button>
-        </div>
-      </form>
-    </div>
-
-    <!-- Registered Classes Section -->
-    <div class="registered-classes">
-      <h3><i class="fas fa-book-open"></i> Registered Classes</h3>
-      <div class="table-wrapper">
-        <table id="registered-classes-table">
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Details</th>
-              <th>Hours</th>
-              <th>CRN</th>
-              <th>Schedule Type</th>
-              <th>Grade Mode</th>
-              <th>Level</th>
-              <th>Part of Term</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td colspan="8">Loading registered classes...</td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="header-info">
+        <h2 id="full-name">Loading...</h2>
+        <span class="email-badge" id="email-display">Loading email...</span>
       </div>
     </div>
+
+    <!-- Profile Form -->
+    <form id="profile-form">
+      <div class="form-group">
+        <label for="first-name"><i class="fas fa-user"></i> First Name</label>
+        <input type="text" id="first-name" name="first_name" placeholder="Enter your first name" disabled>
+      </div>
+      <div class="form-group">
+        <label for="last-name"><i class="fas fa-user"></i> Last Name</label>
+        <input type="text" id="last-name" name="last_name" placeholder="Enter your last name" disabled>
+      </div>
+      <div class="form-group">
+        <label for="date-of-birth"><i class="fas fa-calendar"></i> Date of Birth</label>
+        <input type="date" id="date-of-birth" name="date_of_birth" disabled>
+      </div>
+      <div class="form-group">
+        <label for="marital-status"><i class="fas fa-heart"></i> Marital Status</label>
+        <select id="marital-status" name="marital_status" disabled>
+          <option value="Single">Single</option>
+          <option value="Married">Married</option>
+          <option value="Divorced">Divorced</option>
+          <option value="Widowed">Widowed</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="legal-sex"><i class="fas fa-venus-mars"></i> Legal Sex</label>
+        <select id="legal-sex" name="legal_sex" disabled>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="email"><i class="fas fa-envelope"></i> Email</label>
+        <input type="email" id="email" name="email" readonly>
+      </div>
+      <div class="form-group">
+        <label for="phone-number"><i class="fas fa-phone"></i> Phone Number</label>
+        <input type="text" id="phone-number" name="phone_number" placeholder="Enter your phone number" disabled>
+      </div>
+      <div class="form-group">
+        <label for="address"><i class="fas fa-home"></i> Address</label>
+        <input type="text" id="address" name="address" placeholder="Enter your address" disabled>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" class="save-btn" onclick="saveProfile()" style="display: none;">
+          <i class="fas fa-save"></i> Save Changes
+        </button>
+        <button type="button" class="cancel-btn" onclick="cancelEditMode()" style="display: none;">
+          <i class="fas fa-times"></i> Cancel
+        </button>
+        <button type="button" class="edit-btn" onclick="enableEditMode()">
+          <i class="fas fa-edit"></i> Edit Profile
+        </button>
+      </div>
+    </form>
   </div>
 
-  <script>
-    function triggerFileUpload() {
-      document.getElementById('profile-picture-input').click();
-    }
+  <!-- Registered Classes Section -->
+  <div class="registered-classes">
+    <h3><i class="fas fa-book-open"></i> Registered Classes</h3>
+    <div class="table-wrapper">
+      <table id="registered-classes-table">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Details</th>
+            <th>Hours</th>
+            <th>CRN</th>
+            <th>Schedule Type</th>
+            <th>Grade Mode</th>
+            <th>Level</th>
+            <th>Part of Term</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td colspan="8">Loading registered classes...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <!-- Course Materials Section -->
+<div class="registered-classes" id="materials-box" style="margin-top:1.5rem;">
+  <h3><i class="fas fa-file-alt"></i> Course Materials</h3>
+  <div class="table-wrapper">
+    <table id="student-materials-table">
+      <thead>
+        <tr>
+          <th>Course</th>
+          <th>Title</th>
+          <th>Description</th>
+          <th>Uploaded By</th>
+          <th>Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td colspan="5">Loading course materials...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 
-    function previewProfilePicture(event) {
-      const file = event.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function (e) {
-          document.getElementById('profile-picture').src = e.target.result;
-        };
-        reader.readAsDataURL(file);
+</div>
+
+<script>
+  function triggerFileUpload() {
+    document.getElementById('profile-picture-input').click();
+  }
+
+  function previewProfilePicture(event) {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        document.getElementById('profile-picture').src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  function enableEditMode() {
+    const inputs = document.querySelectorAll('#profile-form input, #profile-form select');
+    inputs.forEach(input => input.disabled = false);
+
+    // Enable profile picture upload
+    const profilePic = document.getElementById('profile-picture');
+    const cameraIcon = document.getElementById('camera-icon');
+    profilePic.classList.add('editable');
+    profilePic.onclick = triggerFileUpload;
+    cameraIcon.onclick = triggerFileUpload;
+
+    document.querySelector('.edit-btn').style.display = 'none';
+    document.querySelector('.save-btn').style.display = 'inline-block';
+    document.querySelector('.cancel-btn').style.display = 'inline-block';
+  }
+
+  function cancelEditMode() {
+    location.reload();
+  }
+
+  async function saveProfile() {
+    const form = document.getElementById('profile-form');
+
+    // Collect form data into a JSON object
+    const jsonPayload = {};
+    const inputs = form.querySelectorAll('input, select');
+    inputs.forEach(input => {
+      if (input.name) {
+        jsonPayload[input.name] = input.value;
       }
-    }
+    });
 
-    function enableEditMode() {
-      const inputs = document.querySelectorAll('#profile-form input, #profile-form select');
-      inputs.forEach(input => input.disabled = false);
+    const email = document.getElementById('email').value;
 
-      // Enable profile picture upload
-      const profilePic = document.getElementById('profile-picture');
-      const cameraIcon = document.getElementById('camera-icon');
-      profilePic.classList.add('editable');
-      profilePic.onclick = triggerFileUpload;
-      cameraIcon.onclick = triggerFileUpload;
+    console.log('Payload being sent to the server:', JSON.stringify(jsonPayload, null, 2));
 
-      document.querySelector('.edit-btn').style.display = 'none';
-      document.querySelector('.save-btn').style.display = 'inline-block';
-      document.querySelector('.cancel-btn').style.display = 'inline-block';
-    }
+    const response = await fetch(`/api/student/${email}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(jsonPayload)
+    });
 
-    function cancelEditMode() {
+    if (response.ok) {
+      alert('Profile updated successfully!');
       location.reload();
+    } else {
+      const error = await response.json();
+      console.error('Error updating profile:', error);
+      alert('Failed to update profile.');
+    }
+  }
+
+  async function fetchStudentData() {
+    const userResponse = await fetch('/api/user');
+    const user = await userResponse.json();
+
+    if (user.error) {
+      console.error('Error fetching user details:', user.error);
+      return;
     }
 
-    async function saveProfile() {
-      const form = document.getElementById('profile-form');
+    const email = user.email;
+    document.getElementById('email-display').textContent = email;
+    
+    const studentResponse = await fetch(`/api/student/${email}`);
+    const student = await studentResponse.json();
 
-      // Collect form data into a JSON object
-      const jsonPayload = {};
-      const inputs = form.querySelectorAll('input, select');
-      inputs.forEach(input => {
-        if (input.name) {
-          jsonPayload[input.name] = input.value;
-        }
-      });
+    document.getElementById('full-name').textContent = student.full_name;
+    document.getElementById('first-name').value = student.first_name || '';
+    document.getElementById('last-name').value = student.last_name || '';
+    document.getElementById('date-of-birth').value = student.date_of_birth || '';
+    document.getElementById('marital-status').value = student.marital_status || '';
+    document.getElementById('legal-sex').value = student.legal_sex || '';
+    document.getElementById('email').value = student.email;
+    document.getElementById('phone-number').value = student.phone_number || '';
+    document.getElementById('address').value = student.address || '';
+  }
 
-      const email = document.getElementById('email').value;
-
-      console.log('Payload being sent to the server:', JSON.stringify(jsonPayload, null, 2));
-
-      const response = await fetch(`/api/student/${email}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(jsonPayload)
-      });
-
-      if (response.ok) {
-        alert('Profile updated successfully!');
-        location.reload();
-      } else {
-        const error = await response.json();
-        console.error('Error updating profile:', error);
-        alert('Failed to update profile.');
-      }
-    }
-
-    async function fetchStudentData() {
-      const userResponse = await fetch('/api/user');
-      const user = await userResponse.json();
-
-      if (user.error) {
-        console.error('Error fetching user details:', user.error);
-        return;
-      }
-
-      const email = user.email;
-      document.getElementById('email-display').textContent = email;
-
-      const studentResponse = await fetch(`/api/student/${email}`);
-      const student = await studentResponse.json();
-
-      document.getElementById('full-name').textContent = student.full_name;
-      document.getElementById('first-name').value = student.first_name || '';
-      document.getElementById('last-name').value = student.last_name || '';
-      document.getElementById('date-of-birth').value = student.date_of_birth || '';
-      document.getElementById('marital-status').value = student.marital_status || '';
-      document.getElementById('legal-sex').value = student.legal_sex || '';
-      document.getElementById('email').value = student.email;
-      document.getElementById('phone-number').value = student.phone_number || '';
-      document.getElementById('address').value = student.address || '';
-    }
-
-    async function fetchRegisteredClasses() {
+  async function fetchRegisteredClasses() {
       const email = document.getElementById('email').value;
       const response = await fetch(`/api/registered_courses/${email}`);
 
@@ -691,20 +636,21 @@
       }
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      fetchStudentData().then(() => {
-        fetchRegisteredClasses();
-        classes.forEach(cls => {
-          const row = document.createElement('tr');
-          row.innerHTML = `
+  document.addEventListener('DOMContentLoaded', () => {
+    fetchStudentData().then(() => {
+      fetchRegisteredClasses();
+      loadStudentMaterials();   // <- here
+   /*    classes.forEach(cls => {
+  const row = document.createElement('tr');
+  row.innerHTML = `
     <td>${cls.course_details.title || 'N/A'}</td>
     ...
   `;
-          tableBody.appendChild(row);
+  tableBody.appendChild(row);
 
-          if (cls.materials && cls.materials.length > 0) {
-            const mrow = document.createElement('tr');
-            mrow.innerHTML = `
+  if (cls.materials && cls.materials.length > 0) {
+    const mrow = document.createElement('tr');
+    mrow.innerHTML = `
       <td colspan="8">
         <strong>Materials:</strong>
         <ul>
@@ -717,13 +663,51 @@
         </ul>
       </td>
     `;
-            tableBody.appendChild(mrow);
-          }
-        });
+    tableBody.appendChild(mrow);
+  }
+}); */
 
-      });
     });
-  </script>
-</body>
+  });
 
+
+  async function loadStudentMaterials() {
+  const tbody = document.querySelector('#student-materials-table tbody');
+  try {
+    const res = await fetch('/api/materials/mine');
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="5">Unable to load materials.</td></tr>';
+      return;
+    }
+    const mats = await res.json();
+
+    if (!mats.length) {
+      tbody.innerHTML = '<tr><td colspan="5">No materials uploaded for your registered courses yet.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = '';
+    mats.forEach(m => {
+      const tr = document.createElement('tr');
+      const linkHtml = m.file_name
+        ? `<a href="/uploads/${m.file_name}" target="_blank">Open</a>`
+        : (m.external_url ? `<a href="${m.external_url}" target="_blank">Open</a>` : '-');
+
+      tr.innerHTML = `
+        <td>${m.course_title || '—'}</td>
+        <td>${m.title || '—'}</td>
+        <td>${m.description || ''}</td>
+        <td>${m.uploaded_by || '—'}</td>
+        <td>${linkHtml}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (err) {
+    console.error(err);
+    tbody.innerHTML = '<tr><td colspan="5">Error loading materials.</td></tr>';
+  }
+}
+
+</script>
+</body>
 </html>
