@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <meta charset="UTF-8">
+   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCDNbOuuoHn9zJHrl7aJxiWYV7k_sOrhF0&callback=initMap"
+  async
+  defer>
+</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SmartAssist Chat | TAMUCC Campus Assistant</title>
@@ -105,13 +111,23 @@
         </button>
       </div>
     </div>
-  </main>
+ </main> <div id="map-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-2xl h-[70vh] rounded-lg shadow-2xl flex flex-col">
+      <div class="p-4 border-b flex justify-between items-center">
+        <h3 class="text-lg font-semibold">Campus Walking Directions</h3>
+        <button id="map-close-btn" class="text-2xl font-bold text-gray-500 hover:text-black">×</button>
+      </div>
+      <div id="map-canvas" class="flex-1 w-full h-full">
+        <div class="w-full h-full flex items-center justify-center text-gray-500">Loading map...</div>
+      </div>
+    </div>
+  </div>
 
-  <!-- MD libs BEFORE the inline script -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
 
   <script>
+    // Grab all the HTML elements we need to talk to
     const chatWindow   = document.getElementById('chat-window');
     const chatInput    = document.getElementById('chat-input');
     const sendBtn      = document.getElementById('send-btn');
@@ -120,6 +136,12 @@
     const endLiveBtn   = document.getElementById('end-live-chat');
     const liveStatus   = document.getElementById('live-status');
     const queueTimerEl = document.getElementById('queue-timer');
+    const modeToggle   = document.getElementById('mode-toggle');
+
+    // ✨ Map modal elements (now they will be found correctly)
+    const mapModal     = document.getElementById('map-modal');
+    const mapCanvas    = document.getElementById('map-canvas');
+    const mapCloseBtn  = document.getElementById('map-close-btn');
 
 
     // chat mode: 'general' = university info, 'student' = only my registered courses
@@ -216,6 +238,83 @@
         queueTimerEl.textContent = "Still waiting for an admin. Thank you for your patience.";
       }
     }
+
+
+    // ... after your renderTimer() function, for example ...
+
+    // ✨ ADD THIS ENTIRE FUNCTION
+    async function showMapModal(destinationAddress) {
+      mapModal.classList.remove('hidden');
+      mapCanvas.innerHTML = '<div class="w-full h-full flex items-center justify-center text-gray-500">Getting your location...</div>';
+
+      let userLocation;
+      try {
+        const position = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true });
+        });
+        userLocation = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+      } catch (err) {
+        console.error("Geolocation failed:", err);
+        mapCanvas.innerHTML = `<div class="p-4 text-red-600">Error: Could not get your location. Please enable location permissions and try again.</div>`;
+        return;
+      }
+
+      mapCanvas.innerHTML = '<div class="w-full h-full flex items-center justify-center text-gray-500">Calculating route...</div>';
+
+      // ✨ START of new try/catch block
+      try {
+        // 2. Initialize Map and Services
+        const directionsService = new google.maps.DirectionsService();
+        const directionsRenderer = new google.maps.DirectionsRenderer();
+        
+        const map = new google.maps.Map(mapCanvas, {
+          center: userLocation,
+          zoom: 17,
+          mapTypeId: 'satellite',
+          tilt: 45,
+        });
+        
+        directionsRenderer.setMap(map);
+
+        // 3. Create the Directions Request
+        const request = {
+          origin: userLocation,
+          destination: destinationAddress,
+          travelMode: 'WALKING'
+        };
+
+        // 4. Get the route and draw it
+        const response = await directionsService.route(request);
+        directionsRenderer.setDirections(response);
+
+      } catch (e) {
+        // ✨ This will now catch all errors (API not enabled, bad key, etc.)
+        console.error("Google Maps failed:", e);
+        mapCanvas.innerHTML = `<div class="p-4 text-red-600">
+          <strong>Error: Map failed to load.</strong><br>
+          This is often because the 'Maps JavaScript API' or 'Directions API' is not enabled in the Google Cloud project.
+        </div>`;
+      }
+    }
+    
+    // This is a dummy function. The Google Maps script will call this
+    // *after* it has finished loading.
+    function initMap() {
+      console.log("Google Maps API loaded.");
+    }
+
+    // Add listener for the modal close button
+    mapCloseBtn.addEventListener('click', () => {
+      mapModal.classList.add('hidden');
+      // Clear the map canvas so it reloads next time
+      mapCanvas.innerHTML = '<div class="w-full h-full flex items-center justify-center text-gray-500">Loading map...</div>';
+    });
+
+
+
 
     // ---------- UI helpers ----------
     function avatar(letter, color='bg-tamuccTeal') {
@@ -420,7 +519,7 @@
     }
 
       // -------------- Toggle between chat modes univerity and student --------------
-      const modeToggle = document.getElementById('mode-toggle');
+
 
       if (modeToggle) {
         modeToggle.addEventListener('click', () => {
@@ -627,6 +726,9 @@
             console.error(e);
             alert('Unable to start live chat right now. Please try again.');
           }
+        } else if (sug.payload.action === 'show_map' && sug.payload.destination) {
+          console.log("Showing map for:", sug.payload.destination);
+          await showMapModal(sug.payload.destination);
         }
       }
     }
@@ -713,5 +815,6 @@
       liveStatus.classList.add('hidden');
     });
   </script>
+  </main>
 </body>
 </html>
