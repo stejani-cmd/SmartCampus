@@ -84,6 +84,52 @@
     .container { flex-direction:column; }
     .sidebar { width:100%; flex-direction:row; justify-content:space-around; border-right:none; border-bottom:1px solid #e0e0e0; padding:1rem 0.5rem; }
   }
+  /* Navbar */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      background: #0067A5;
+      color: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Brand section: logo + text */
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    nav h1 {
+      font-size: 1.6rem;
+      font-weight: 600;
+    }
+
+    nav .logo {
+      width: 52px;
+      height: 45px;
+      object-fit: contain;
+      padding: 4px;
+    }
+
+
+    /* Links section */
+    nav .nav-links a {
+      color: #fff;
+      text-decoration: none;
+      margin-left: 1.5rem;
+      font-weight: 500;
+      transition: 0.3s;
+    }
+
+    nav .nav-links a:hover {
+      color: #00A99D;
+    }
 </style>
 
 <script>
@@ -174,7 +220,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <!-- Navbar -->
 <nav>
-  <h1>SmartCampus</h1>
+  <div class="nav-left">
+      <img src="{{ url_for('static', path='assets/images/logo.png') }}" alt="SmartCampus Logo" class="logo">
+      <h1>SmartCampus</h1>
+  </div>
   <div class="nav-links">
     <a href="#">Home</a>
     <a href="#">Tickets</a>

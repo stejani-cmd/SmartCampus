@@ -1116,11 +1116,23 @@ import urllib.parse # 👈 Add this import at the top of main.py
 # Helper function to find and format department info
 def get_department_answer(question: str):
     qlow = question.lower()
-    
-    # ... (the database query part is the same) ...
+
+    # 1) detect if the user even asked for LOCATION-ish stuff
+    location_triggers = [
+        "where is", "where's", "location", "locate", "map",
+        "building", "office", "address", "room", "directions",
+        "how do i get", "how to get", "reach", "nearby"
+    ]
+    has_location_intent = any(trigger in qlow for trigger in location_triggers)
+
+    # if the user did NOT ask for location-ish info, don't hijack the answer
+    if not has_location_intent:
+        return None
+
+    # 2) now do your old dept lookup
     try:
         all_depts = list(db.departments.find(
-            {"status": "active"}, 
+            {"status": "active"},
             {"short_name": 1, "name": 1, "building": 1, "office_location": 1}
         ))
         if not all_depts:
@@ -1131,42 +1143,35 @@ def get_department_answer(question: str):
 
     matched_dept_doc = None
     for dept in all_depts:
-        if (dept.get("short_name") and dept["short_name"].lower() in qlow) or \
-           (dept.get("name") and dept["name"].lower() in qlow):
-            
-            matched_dept_doc = db.departments.find_one(
-                {"_id": dept["_id"]}
-            )
+        short_name = (dept.get("short_name") or "").lower()
+        full_name = (dept.get("name") or "").lower()
+
+        if short_name and short_name in qlow:
+            matched_dept_doc = db.departments.find_one({"_id": dept["_id"]})
             break
-    
+        if full_name and full_name in qlow:
+            matched_dept_doc = db.departments.find_one({"_id": dept["_id"]})
+            break
+
     if not matched_dept_doc:
         return None
 
-    # --- We found a department! Now, format the answer. ---
-    
-    # 1. Create the full destination address string
-    # We use a precise name for the Google Directions API
-    destination_address = f"{matched_dept_doc['name']}, {matched_dept_doc['building']}, Corpus Christi, TX"
+    # 3) build the address + map action like you already do
+    dept_name = matched_dept_doc.get("name", "the department")
+    dept_building = matched_dept_doc.get("building", "")
+    destination_address = f"{dept_name}, {dept_building}, Corpus Christi, TX"
 
-    # 2. Check what info the user asked for
-    info = []
-    if "hour" in qlow:
-        info.append(f"**Office Hours:** {matched_dept_doc['office_hours']}")
-    if "phone" in qlow:
-        info.append(f"**Phone:** {matched_dept_doc['phone']}")
-    if "email" in qlow:
-        info.append(f"**Email:** {matched_dept_doc['email']}")
+    # 4) final payload (same shape you were returning)
+    answer_text_lines = [f"The {dept_name} is in **{dept_building}**."]
+    if matched_dept_doc.get("office_location"):
+        answer_text_lines.append(f"Office/room: **{matched_dept_doc['office_location']}**")
 
-    # 3. Create the text part of the bot's answer
-    answer_text = f"The **{matched_dept_doc['name']}** is located in the **{matched_dept_doc['building']}, Room {matched_dept_doc['office_location']}**."
-    if info:
-        answer_text += "\n\nHere is their other info:\n- " + "\n- ".join(info)
+    answer_text_lines.append("Tap the button below to open the map.")
+    answer_text = "\n".join(answer_text_lines)
 
-    # 4. ✨ THIS IS THE NEW PART ✨
-    # Instead of a Markdown link, we create a JSON object
-    # that our frontend JavaScript will use to trigger the map.
     return {
         "answer": answer_text,
+        "source": "department_intent",
         "suggest_live_chat": False,
         "suggested_followups": [
             {
@@ -1174,12 +1179,12 @@ def get_department_answer(question: str):
                 "payload": {
                     "type": "action",
                     "action": "show_map",
-                    # Pass the destination to the frontend
-                    "destination": destination_address 
-                }
+                    "destination": destination_address,
+                },
             }
-        ]
+        ],
     }
+
 # ======================================================================================
 #                                  BOT ENDPOINT
 # ======================================================================================
@@ -1251,15 +1256,14 @@ def simple_score(text: str, q: str) -> int:
     return score
 
 
-import json # Make sure this import is at the top of your main.py
-import re   # Make sure this import is at the top of your main.py
-from fastapi import Request # Make sure this is imported
+import json
+import re
+from fastapi import Request
+from bson import ObjectId
 
-# This function now returns a full dictionary, not just a string
 async def answer_from_student_scope(request: Request, question: str, student_email: str | None):
-    
     # Helper to create the standard response shape
-    def create_response(answer: str, followups: List = None):
+    def create_response(answer: str, followups: list = None):
         return {
             "answer": answer,
             "suggested_followups": followups if followups is not None else [],
@@ -1273,26 +1277,23 @@ async def answer_from_student_scope(request: Request, question: str, student_ema
 
     # --- ✨ Intent A: Show Answers for a Remembered Quiz ---
     is_answer_request = any(k in qlow for k in ["show answer", "what are the answers", "reveal solution", "give answers"])
-    
     if is_answer_request:
         last_quiz = request.session.get("last_quiz")
         if not last_quiz:
             return create_response("I haven't given you a quiz yet. Ask me to 'generate a quiz' first!")
-        
         print("[Student Bot] Showing answers for stored quiz...")
         formatted_answers = ["Here are the answers and explanations for the last quiz:"]
         for i, q in enumerate(last_quiz.get('quiz', []), 1):
             formatted_answers.append(f"\n**{i}. {q.get('question')}**")
             formatted_answers.append(f"   **Answer:** {q.get('answer')}")
             formatted_answers.append(f"   **Explanation:** {q.get('explanation', 'No explanation provided.')}")
-        
-        request.session.pop("last_quiz", None) 
+        request.session.pop("last_quiz", None)
         return create_response("\n".join(formatted_answers))
 
     # --- 1. Identify Student's Courses ---
     regs = list(db.registrations.find({"student_email": student_email}))
     if not regs:
-      return create_response("You don’t have any registered courses right now.")
+        return create_response("You don’t have any registered courses right now.")
 
     course_ids = [ObjectId(r["course_id"]) for r in regs]
     student_courses = list(db.courses.find({"_id": {"$in": course_ids}}))
@@ -1336,18 +1337,19 @@ async def answer_from_student_scope(request: Request, question: str, student_ema
         f"{staff_line}"
     )
 
-    texts = list(db.course_materials_text.find({ "course_id": matched_course["_id"] }))
-    if mats:
-        for m in mats:
+    texts = list(db.course_materials_text.find({"course_id": matched_course["_id"]}))
+    if texts:  # 👈 fixed from "if mats:"
+        for m in texts:  # 👈 fixed from "for m in mats:"
             title = m.get("title", "").lower()
             desc = m.get("description", "").lower()
-            if title and title in qlow or desc and desc in qlow:
-                link_part = f"Link: {m['file_path']}" if m.get(
-                    "file_path") else ""
-                return f"{m.get('title','Material')}: {m.get('description','')} {link_part}".strip()
+            if (title and title in qlow) or (desc and desc in qlow):
+                link_part = f"Link: {m['file_path']}" if m.get("file_path") else ""
+                return create_response(
+                    f"{m.get('title','Material')}: {m.get('description','')} {link_part}".strip()
+                )
 
     if not texts:
-        mats = list(db.course_materials.find({ "course_id": matched_course["_id"], "visible": True }))
+        mats = list(db.course_materials.find({"course_id": matched_course["_id"], "visible": True}))
         if not mats:
             return create_response(base_line + "\n\nNo materials have been uploaded for this course yet.")
         links = []
@@ -1356,7 +1358,11 @@ async def answer_from_student_scope(request: Request, question: str, student_ema
                 links.append(f"- {m['title']}: /uploads/{m['file_name']}")
             elif m.get("external_url"):
                 links.append(f"- {m['title']}: {m['external_url']}")
-        return create_response(base_line + "\n\nI found material(s), but they are not text-indexed, so I can't answer questions about them yet:\n" + "\n".join(links))
+        return create_response(
+            base_line
+            + "\n\nI found material(s), but they are not text-indexed, so I can't answer questions about them yet:\n"
+            + "\n".join(links)
+        )
 
     # --- 4. Find Best Text Context ---
     best_text_doc = None
@@ -1366,25 +1372,24 @@ async def answer_from_student_scope(request: Request, question: str, student_ema
         if s > best_score:
             best_text_doc = t
             best_score = s
-            
+
     if not best_text_doc:
         return create_response(base_line + "\n\nI found this course, but couldn't match your question to any specific material.")
 
     context = (best_text_doc.get("text") or "")[:8000]
 
-    # --- 5. ✨ NEW Intent-Based LLM Call (Quiz, Flashcard, Summary, or Q&A) ---
-    
+    # --- 5. Intent-based LLM Calls ---
     is_quiz_request = any(k in qlow for k in ["quiz", "test me", "mcq", "generate questions", "practice problem"])
     is_flashcard_request = any(k in qlow for k in ["flashcard", "make flashcards", "key terms"])
     is_summary_request = any(k in qlow for k in ["summarize", "summary", "tl;dr", "give me the gist"])
 
     try:
-        # --- Intent C: Quiz Request ---
         if is_quiz_request:
             num_questions = 3
             m = re.search(r"(\d+)\s+(quiz|questions)", qlow)
-            if m: num_questions = int(m.group(1))
-            
+            if m:
+                num_questions = int(m.group(1))
+
             print(f"[Student Bot] Generating {num_questions} quiz questions...")
             system_prompt = f"""
             You are a teaching assistant. Based on the provided course material, generate {num_questions} multiple-choice quiz questions.
@@ -1392,30 +1397,32 @@ async def answer_from_student_scope(request: Request, question: str, student_ema
             Return ONLY a valid JSON object in the format: {{"quiz": [...]}}
             """
             user_prompt = f"Course Material:\n{context}"
-            
+
             raw_json = llm_complete(
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                model=FOLLOWUP_MODEL, temperature=0.3, max_tokens=2000, 
+                model=FOLLOWUP_MODEL,
+                temperature=0.3,
+                max_tokens=2000,
                 response_format={"type": "json_object"}
             )
-            
+
             quiz_data = json.loads(raw_json)
             request.session["last_quiz"] = quiz_data
-            
+
             formatted_questions = [f"Okay, I've generated {len(quiz_data.get('quiz', []))} practice questions. Here they are:"]
             for i, q in enumerate(quiz_data.get('quiz', []), 1):
                 formatted_questions.append(f"\n**{i}. {q.get('question')}**")
                 for opt in q.get("options", []):
                     formatted_questions.append(f"   - {opt}")
-            
+
             followups = [{"label": "Show me the answers", "payload": {"type": "faq", "query": "show me the answers"}}]
             return create_response("\n".join(formatted_questions), followups)
 
-        # --- ✨ Intent D: Flashcard Request ---
         elif is_flashcard_request:
             num_cards = 5
             m = re.search(r"(\d+)\s+(flashcard|terms)", qlow)
-            if m: num_cards = int(m.group(1))
+            if m:
+                num_cards = int(m.group(1))
 
             print(f"[Student Bot] Generating {num_cards} flashcards...")
             system_prompt = f"""
@@ -1426,7 +1433,9 @@ async def answer_from_student_scope(request: Request, question: str, student_ema
 
             raw_json = llm_complete(
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                model=FOLLOWUP_MODEL, temperature=0.3, max_tokens=2000,
+                model=FOLLOWUP_MODEL,
+                temperature=0.3,
+                max_tokens=2000,
                 response_format={"type": "json_object"}
             )
 
@@ -1435,22 +1444,21 @@ async def answer_from_student_scope(request: Request, question: str, student_ema
             for card in card_data.get('flashcards', []):
                 formatted_cards.append(f"\n**{card.get('front')}**")
                 formatted_cards.append(f"   - {card.get('back')}")
-            
             return create_response("\n".join(formatted_cards))
 
-        # --- ✨ Intent E: Summary Request ---
         elif is_summary_request:
             print(f"[Student Bot] Generating summary...")
             system_prompt = "You are a teaching assistant. Summarize the provided course material in a few key bullet points."
             user_prompt = f"Course Material:\n{context}"
-            
+
             answer = llm_complete(
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                model=FOLLOWUP_MODEL, temperature=0.2, max_tokens=500
+                model=FOLLOWUP_MODEL,
+                temperature=0.2,
+                max_tokens=500
             )
             return create_response(answer)
 
-        # --- Intent F: Standard Q&A (with NEW follow-ups) ---
         else:
             print(f"[Student Bot] Answering standard question...")
             system_prompt = """
@@ -1464,21 +1472,22 @@ async def answer_from_student_scope(request: Request, question: str, student_ema
 
             answer = llm_complete(
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                model=FOLLOWUP_MODEL, temperature=0.4, max_tokens=500
+                model=FOLLOWUP_MODEL,
+                temperature=0.4,
+                max_tokens=500
             )
-            
-            # ✨ Create contextual follow-ups
+
             followups = [
                 {"label": "Quiz me on this topic", "payload": {"type": "faq", "query": f"generate quiz on {question}"}},
                 {"label": "Make flashcards for this", "payload": {"type": "faq", "query": f"make flashcards for {question}"}},
                 {"label": "Summarize this topic", "payload": {"type": "faq", "query": f"summarize {question}"}}
             ]
-            
             return create_response(answer, followups)
-            
+
     except Exception as e:
         print(f"[Student Bot] LLM call failed: {e}")
-        return create_response(f"I ran into an error trying to process that: {e}. Please try a different question.")   
+        return create_response(f"I ran into an error trying to process that: {e}. Please try a different question.")
+  
 def format_course_answer(c):
     return (
         f"{c.get('title')} ({c.get('details')})\n"
