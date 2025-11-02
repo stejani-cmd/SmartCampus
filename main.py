@@ -1,3 +1,8 @@
+import re
+from fastapi import Request
+from datetime import datetime
+from fastapi import UploadFile, File, HTTPException
+from fastapi import HTTPException, Request
 import anyio
 from fastapi import FastAPI, Request, Form, WebSocket, WebSocketDisconnect, File, UploadFile, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -8,7 +13,6 @@ from typing import List, Dict
 from pymongo import MongoClient
 import gridfs
 import os
-import re
 import json
 from pathlib import Path
 from fastapi.responses import JSONResponse
@@ -25,9 +29,9 @@ from app.utils import get_current_user
 
 from app.routers import auth, pages, forum
 from app.core.config import settings
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("update_student")
+import os
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # ---------- env ----------
 load_dotenv()
@@ -35,17 +39,17 @@ print("[BOOT] USE_LLM_FOLLOWUPS=", os.getenv("USE_LLM_FOLLOWUPS", "1"),
       "MODEL=", os.getenv("FOLLOWUP_MODEL", "gpt-4o-mini"),
       "OPENAI_KEY_PRESENT=", bool(os.getenv("OPENAI_API_KEY")))
 
+# ------------------ FastAPI App ------------------
+app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")  # folder for HTML templates
 
-app = FastAPI(title=settings.PROJECT_NAME)
-
-# static
-app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")
-
-# session middleware
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("SECRET_KEY", "dev-secret-change-me"),
-    session_cookie="smartcampus_session",
+    secret_key=os.getenv("SECRET_KEY"),
+    same_site="lax",   # or "none" if using HTTPS
+    https_only=False,
+    max_age=3600  # Session expires after 1 hour
 )
 
 # routers
@@ -66,10 +70,9 @@ oauth.register(
 )
 
 # ------------------ MongoDB Setup ------------------
-MONGO_URI = os.getenv(
-    "MONGODB_URI", "mongodb+srv://Manny0715:Manmeet12345@cluster0.1pf6oxg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+MONGO_URI = os.getenv("MONGODB_URI", "mongodb://mongo:27017/smartassist")
 client = MongoClient(MONGO_URI)
-db = client.SmartCampus
+db = client.smartassist
 users_collection = db.users
 live_chat_collection = db.live_chat
 live_chat_sessions = db.live_chat_sessions
@@ -81,6 +84,11 @@ try:
         [("title", "text"), ("content", "text"), ("category", "text")])
 except Exception:
     pass
+
+# ======================================================================================
+#                                    OpenAI SHIM
+# Works with both OpenAI SDK v1 (OpenAI()) and legacy v0 (openai.ChatCompletion.create)
+# ======================================================================================
 
 
 def llm_complete(messages, model="gpt-4o-mini", temperature=0.4, max_tokens=180) -> str:
@@ -121,6 +129,9 @@ def llm_complete(messages, model="gpt-4o-mini", temperature=0.4, max_tokens=180)
                 f"OpenAI failed (v1: {v1_err!r}; v0: {v0_err!r})")
 
 
+# ======================================================================================
+#                        LLM-STYLE, INTENT-LIKE FOLLOW-UPS
+# ======================================================================================
 USE_LLM_FOLLOWUPS = os.getenv("USE_LLM_FOLLOWUPS", "1") == "1"
 FOLLOWUP_MODEL = os.getenv("FOLLOWUP_MODEL", "gpt-4o-mini")
 DEBUG_FOLLOWUPS = os.getenv("DEBUG_FOLLOWUPS", "1") == "1"
@@ -378,6 +389,96 @@ class ChatManager:
 manager = ChatManager()
 
 
+def save_ticket(ticket: dict, attachment: UploadFile | None = None):
+    # store ticket in MongoDB; if attachment provided, save in GridFS and reference file id
+    if attachment is not None:
+        try:
+            content = attachment.file.read()
+            file_id = fs.put(content, filename=attachment.filename,
+                             contentType=attachment.content_type)
+            ticket["attachment_id"] = file_id
+            ticket["attachment_name"] = attachment.filename
+            ticket["attachment_content_type"] = attachment.content_type
+        except Exception as e:
+            ticket["attachment_error"] = f"failed to save to gridfs: {e}"
+
+    result = db.tickets.insert_one(ticket)
+    inserted_id = result.inserted_id
+
+    # Debug output: print inserted id and ticket document (attachment_id as string)
+    debug_doc = ticket.copy()
+    if "attachment_id" in debug_doc:
+        debug_doc["attachment_id"] = str(debug_doc["attachment_id"])
+    try:
+        print(f"[DEBUG] Inserted ticket id: {inserted_id}")
+        print(f"[DEBUG] Ticket document: {json.dumps(debug_doc, default=str)}")
+    except Exception:
+        # fallback simple print if json.dumps fails
+        print("[DEBUG] Ticket document (fallback):", debug_doc)
+
+    return inserted_id
+
+
+@app.post("/raise_ticket")
+async def raise_ticket(
+    subject: str = Form(...),
+    category: str = Form(...),
+    priority: str = Form(...),
+    description: str = Form(...),
+    attachment: UploadFile | None = File(None)
+):
+    # Basic validation
+    if not subject or not category or not priority or not description:
+        return JSONResponse({"success": False, "error": "Missing required fields"}, status_code=400)
+
+    ticket = {
+        "subject": subject,
+        "category": category,
+        "priority": priority,
+        "description": description,
+        "status": "open"
+    }
+
+    try:
+        inserted_id = save_ticket(ticket, attachment)
+        print(
+            f"[DEBUG] /raise_ticket: inserted_id={inserted_id} attachment_present={attachment is not None}")
+        return {"success": True, "ticket_id": str(inserted_id)}
+    except Exception as e:
+        print(f"[ERROR] /raise_ticket exception: {e}")
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+def save_appointment(appt: dict, attachment: UploadFile | None = None):
+    # store appointment in MongoDB; if attachment provided, save in GridFS and reference file id
+    if attachment is not None:
+        try:
+            content = attachment.file.read()
+            file_id = fs.put(content, filename=attachment.filename,
+                             contentType=attachment.content_type)
+            appt["attachment_id"] = file_id
+            appt["attachment_name"] = attachment.filename
+            appt["attachment_content_type"] = attachment.content_type
+        except Exception as e:
+            appt["attachment_error"] = f"failed to save to gridfs: {e}"
+
+    result = db.appointments.insert_one(appt)
+    inserted_id = result.inserted_id
+
+    # Debug output: print inserted id and appointment document (attachment_id as string)
+    debug_doc = appt.copy()
+    if "attachment_id" in debug_doc:
+        debug_doc["attachment_id"] = str(debug_doc["attachment_id"])
+    try:
+        print(f"[DEBUG] Inserted appointment id: {inserted_id}")
+        print(
+            f"[DEBUG] Appointment document: {json.dumps(debug_doc, default=str)}")
+    except Exception:
+        print("[DEBUG] Appointment document (fallback):", debug_doc)
+
+    return inserted_id
+
+
 # ======================================================================================
 #                                   WEBSOCKETS
 # ======================================================================================
@@ -490,10 +591,11 @@ async def admin_ws(websocket: WebSocket):
         print("[DEBUG] Admin disconnected")
         manager.disconnect(websocket)
 
-
 # ======================================================================================
 #                                   REST API
 # ======================================================================================
+
+
 @app.get("/api/chat/{session_id}")
 async def get_chat_history(session_id: str):
     print(f"[DEBUG] Fetching chat history for session_id: {session_id}")
@@ -549,6 +651,608 @@ async def list_live_chats():
     order = {"queued": 0, "live": 1, "closed": 2}
     docs.sort(key=lambda x: order.get(x.get("status", "queued"), 9))
     return docs
+
+# ======================================================================================
+#                               PAGES & AUTH
+# ======================================================================================
+
+
+@app.get("/")
+def landing(request: Request):
+    return templates.TemplateResponse("home.html", {"request": request})
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def home(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+# ---- Register (GET + POST) ----
+
+
+@app.get("/register", response_class=HTMLResponse)
+async def get_register(request: Request):
+    return templates.TemplateResponse("register.html", {"request": request})
+
+
+@app.post("/register")
+async def post_register(
+    request: Request,
+    full_name: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+    role: str = Form(...)           # keep required (see form below)
+):
+    if password != confirm_password:
+        return templates.TemplateResponse(
+            "register.html",
+            {"request": request, "error": "Passwords do not match!"}
+        )
+
+    if users_collection.find_one({"email": email}):
+        return templates.TemplateResponse(
+            "register.html",
+            {"request": request, "error": "Email already registered!"}
+        )
+
+    users_collection.insert_one({
+        "full_name": full_name,
+        "email": email,
+        "password": password,       # TODO: hash this
+        "role": role
+    })
+    return templates.TemplateResponse(
+        "login.html",
+        {"request": request, "message": "Registration successful! Please login."}
+    )
+
+
+""" @app.get("/login", response_class=HTMLResponse)
+async def get_login(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request}) """
+
+
+@app.post("/login")
+async def post_login(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    role: str = Form(...)
+):
+    user = users_collection.find_one({"email": email})
+    if user and user["password"] == password and user["role"] == role:
+        request.session["user"] = {
+            "full_name": user["full_name"],
+            "email": user["email"],
+            "role": user["role"]
+        }
+        # Debug log to confirm session set
+        print("[DEBUG] Session set for user:", request.session["user"])
+        if role == "student":
+            return RedirectResponse("/student_home", status_code=302)
+        elif role == "staff":
+            return RedirectResponse("/staff_home", status_code=302)
+        elif role == "admin":
+            return RedirectResponse("/admin_home", status_code=302)
+    return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials or role!"})
+
+# Add session validation and role-based access control to protect dashboard routes
+
+
+# Middleware to validate session and restrict access based on roles
+def get_current_user(request: Request):
+    user = request.session.get("user")
+    print("[DEBUG] Current session user:", user)  # Debug log
+    if not user:
+        request.session.clear()  # Ensure session is cleared if no user
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not user.get("role") or not user.get("email"):
+        request.session.clear()  # Clear stale session
+        print("[DEBUG] Stale session cleared")  # Debug log
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return user
+
+# get mail
+
+
+def get_student_email_from_request(request: Request, fallback: str | None = None):
+    # 1) if frontend sent the email, use that
+    if fallback:
+        return fallback
+    # 2) else try session.user.email
+    user = request.session.get("user")
+    if user and user.get("email"):
+        return user["email"]
+    return None
+
+
+def role_required(required_role: str):
+    def role_dependency(user: dict = Depends(get_current_user)):
+        if user.get("role") != required_role:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        return user
+    return role_dependency
+
+
+@app.get("/student_home", response_class=HTMLResponse)
+async def student_dashboard(request: Request, user: dict = Depends(role_required("student"))):
+    return templates.TemplateResponse("student_home.html", {"request": request})
+
+
+@app.get("/staff_home", response_class=HTMLResponse)
+async def staff_dashboard(request: Request, user: dict = Depends(role_required("staff"))):
+    return templates.TemplateResponse("staff_home.html", {"request": request})
+
+
+@app.get("/admin_home", response_class=HTMLResponse)
+async def admin_dashboard(request: Request, user: dict = Depends(role_required("admin"))):
+    return templates.TemplateResponse("admin_home.html", {"request": request})
+
+
+@app.get("/knowledge_base", response_class=HTMLResponse)
+async def knowledge_base(request: Request, user: dict = Depends(role_required("admin"))):
+    return templates.TemplateResponse("knowledge_base.html", {"request": request})
+
+
+@app.get("/edit_profile", response_class=HTMLResponse)
+async def edit_profile(request: Request, user: dict = Depends(role_required("student"))):
+    return templates.TemplateResponse("edit_profile.html", {"request": request})
+
+
+@app.get("/guest_home", response_class=HTMLResponse)
+async def guest_dashboard(request: Request, user: dict = Depends(role_required("guest"))):
+    return templates.TemplateResponse("guest_home.html", {"request": request})
+
+
+@app.get("/chat", response_class=HTMLResponse)
+async def chat_page(request: Request, user: dict = Depends(get_current_user)):
+    if user.get("role") not in ["guest", "student", "admin"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    user = request.session.get("user")
+    return templates.TemplateResponse(
+        "chat.html",
+        {
+            "request": request,
+            "user": user,   # 👈 so Jinja can do {{ user.email }}
+        },
+    )
+
+
+# ------------------ Ticket & Appointment Endpoints ------------------
+
+@app.post("/book_appointment")
+async def book_appointment(
+    type: str = Form(...),
+    date: str = Form(...),
+    time: str = Form(...),
+    notes: str = Form(""),
+    attachment: UploadFile | None = File(None)
+):
+    if not type or not date or not time:
+        return JSONResponse({"success": False, "error": "Missing required fields"}, status_code=400)
+
+    appt = {
+        "type": type,
+        "date": date,
+        "time": time,
+        "notes": notes,
+        "status": "scheduled"
+    }
+
+    try:
+        inserted_id = save_appointment(appt, attachment)
+        print(
+            f"[DEBUG] /book_appointment: inserted_id={inserted_id} attachment_present={attachment is not None}")
+        return {"success": True, "appointment_id": str(inserted_id)}
+    except Exception as e:
+        print(f"[ERROR] /book_appointment exception: {e}")
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+# Cancel a ticket
+
+
+@app.post("/api/tickets/cancel/{ticket_id}")
+async def cancel_ticket(ticket_id: str):
+    try:
+        result = db.tickets.update_one(
+            {"_id": ObjectId(ticket_id)},
+            {"$set": {"status": "Cancelled", "last_updated": datetime.now().isoformat()}}
+        )
+        if result.modified_count == 1:
+            return {"success": True, "message": "Ticket cancelled successfully."}
+        return {"success": False, "message": "Ticket not found or already cancelled."}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# Cancel an appointment
+
+
+@app.post("/api/appointments/cancel/{appointment_id}")
+async def cancel_appointment(appointment_id: str):
+    try:
+        result = db.appointments.update_one(
+            {"_id": ObjectId(appointment_id)},
+            {"$set": {"status": "Cancelled"}}
+        )
+        if result.modified_count == 1:
+            return {"success": True, "message": "Appointment cancelled successfully."}
+        return {"success": False, "message": "Appointment not found or already cancelled."}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# Reschedule an appointment
+
+
+@app.post("/api/appointments/reschedule/{appointment_id}")
+async def reschedule_appointment(appointment_id: str, new_date: str, new_time: str):
+    try:
+        result = db.appointments.update_one(
+            {"_id": ObjectId(appointment_id)},
+            {"$set": {"date": new_date, "time": new_time,
+                      "status": "Pending Confirmation"}}
+        )
+        if result.modified_count == 1:
+            return {"success": True, "message": "Appointment rescheduled successfully."}
+        return {"success": False, "message": "Appointment not found or could not be rescheduled."}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# Debug endpoint to inspect database state from the app's perspective
+
+
+@app.get("/api/debug")
+async def api_debug():
+    try:
+        cols = db.list_collection_names()
+        tickets_count = db.tickets.count_documents(
+            {}) if "tickets" in cols else 0
+        appts_count = db.appointments.count_documents(
+            {}) if "appointments" in cols else 0
+
+        latest_ticket = None
+        if tickets_count > 0:
+            doc = db.tickets.find_one({}, sort=[("_id", -1)])
+            if doc:
+                # convert ObjectId fields to strings for JSON
+                doc["_id"] = str(doc["_id"])
+                if "attachment_id" in doc:
+                    doc["attachment_id"] = str(doc["attachment_id"])
+                latest_ticket = doc
+
+        return {
+            "db": db.name,
+            "collections": cols,
+            "tickets_count": tickets_count,
+            "appointments_count": appts_count,
+            "latest_ticket": latest_ticket,
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# Return list of tickets (optionally filter by status)
+@app.get("/api/tickets")
+async def api_tickets(status: str | None = None):
+    try:
+        query = {"status": {"$ne": "Cancelled"}}  # Exclude cancelled tickets
+        if status:
+            query["status"] = status
+        docs = list(db.tickets.find(query).sort([("_id", -1)]))
+        out = []
+        for d in docs:
+            d["_id"] = str(d["_id"])
+            d["date_created"] = d.get("date_created", "Unknown")
+            d["last_updated"] = d.get("last_updated", "Unknown")
+            d["assigned_staff"] = d.get("assigned_staff", "Not Assigned Yet")
+            if "attachment_id" in d:
+                d["attachment_id"] = str(d["attachment_id"])
+            out.append(d)
+        return {"count": len(out), "tickets": out}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# Return list of appointments; if upcoming=true, only return date >= today
+
+
+@app.get("/api/appointments")
+async def api_appointments(upcoming: bool = False):
+    try:
+        # Exclude cancelled appointments
+        query = {"status": {"$ne": "Cancelled"}}
+        if upcoming:
+            today = date.today().isoformat()
+            query["date"] = {"$gte": today}
+        docs = list(db.appointments.find(
+            query).sort([("date", 1), ("time", 1)]))
+        out = []
+        for d in docs:
+            d["_id"] = str(d["_id"])
+            d["status"] = d.get("status", "Pending")
+            if d["status"] == "Confirmed":
+                appointment_date = datetime.strptime(
+                    d["date"], "%Y-%m-%d").date()
+                days_left = (appointment_date - date.today()).days
+                d["countdown"] = f"In {days_left} days" if days_left > 0 else "Today"
+            d["location_mode"] = d.get("location_mode", "Unknown")
+            if "attachment_id" in d:
+                d["attachment_id"] = str(d["attachment_id"])
+            out.append(d)
+        return {"count": len(out), "appointments": out}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# Download GridFS attachment by id
+@app.get("/api/attachment/{file_id}")
+async def api_attachment(file_id: str):
+    try:
+        grid_out = fs.get(ObjectId(file_id))
+        data = grid_out.read()
+        return StreamingResponse(io.BytesIO(data), media_type=(grid_out.content_type or "application/octet-stream"), headers={"Content-Disposition": f"attachment; filename=\"{grid_out.filename or file_id}\""})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+# Adding an endpoint to fetch user details
+
+@app.get("/api/user")
+async def get_user_details(request: Request):
+    try:
+        user = request.session.get("user")
+        print("[DEBUG] User details from session:", user)  # Debug log
+        if user:
+            return {
+                "full_name": user.get("full_name"),
+                "email": user.get("email"),
+                "role": user.get("role")
+            }
+        return JSONResponse({"error": "User not logged in"}, status_code=401)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# Adding an API endpoint to fetch stats & knowledge base
+
+
+@app.get("/api/stats")
+async def get_stats():
+    try:
+        knowledge_articles_count = db.knowledge_base.count_documents({})
+        departments_count = db.departments.count_documents(
+            {"status": "active"})
+        total_users_count = db.users.count_documents({})
+        upcoming_appointments_count = db.appointments.count_documents({
+            "status": {"$ne": "Cancelled"},
+            "date": {"$gte": date.today().isoformat()}
+        })
+
+        return {
+            "knowledge_articles": knowledge_articles_count,
+            "departments": departments_count,
+            "total_users": total_users_count,
+            "upcoming_appointments": upcoming_appointments_count
+        }
+    except Exception as e:
+        print(f"Error fetching stats: {e}")
+        return {
+            "knowledge_articles": 0,
+            "departments": 0,
+            "total_users": 0,
+            "upcoming_appointments": 0
+        }
+
+
+@app.get("/api/knowledge_base")
+async def get_knowledge_base():
+    try:
+        articles = list(db.knowledge_base.find({}, {"_id": 0}))
+        return {"articles": articles}
+    except Exception as e:
+        print(f"Error fetching knowledge base articles: {e}")
+        return {"articles": []}
+
+
+@app.post("/api/knowledge_base")
+async def add_knowledge_article(request: Request):
+    data = await request.json()
+    category = data.get("category")
+    title = data.get("title")
+    url = data.get("url")
+
+    if not category or not title or not url:
+        return JSONResponse({"error": "All fields are required."}, status_code=400)
+
+    try:
+        # Extract content from the URL automatically
+        from extract_web_content_to_mongo import extract_page, save_to_db
+        article = extract_page(url, category, title)
+        if not article:
+            return JSONResponse({"error": "Failed to fetch content from URL."}, status_code=400)
+
+        # Save to MongoDB
+        save_to_db(article)
+        return JSONResponse({"message": "Article added successfully."}, status_code=201)
+    except Exception as e:
+        print(f"Error adding article: {e}")
+        return JSONResponse({"error": "Internal server error."}, status_code=500)
+
+
+# ======================================================================================
+#                                  BOT ENDPOINT
+# ======================================================================================
+@app.post("/chat_question")
+async def chat_question(
+    request: Request,
+    question: str = Form(...),
+    mode: str = Form("general"),
+    student_email: str | None = Form(None),
+):
+    # 👇 figure out who the student is
+    student_email = get_student_email_from_request(request, student_email)
+
+    # 👇 if frontend set "student" → use our Mongo filtering
+    if mode == "student":
+        answer = await answer_from_student_scope(question, student_email)
+        # we can still return in the SAME shape your frontend expects
+        return {
+            "answer": answer,
+            "suggest_live_chat": False,
+            "suggested_followups": [],
+        }
+
+    # 👇 otherwise fall back to your OLD logic
+    from rag_pipeline import get_answer
+    answer, _ = get_answer(question)
+
+    chips, suggest_live_chat, fu_source = build_llm_style_followups(
+        user_question=question,
+        answer_text=answer or "",
+        k=4
+    )
+
+    if suggest_live_chat:
+        chips.append({"label": "Talk to an admin", "payload": {
+                     "type": "action", "action": "escalate"}})
+
+    resp = {
+        "answer": answer,
+        "suggest_live_chat": suggest_live_chat,
+        "suggested_followups": chips
+    }
+    if DEBUG_FOLLOWUPS:
+        # "openai" | "fallback" | "fallback_error"
+        resp["followup_generator"] = fu_source
+    return resp
+
+
+async def answer_from_student_scope(question: str, student_email: str | None):
+    if not student_email:
+        return "I couldn’t find your student account. Please log in again."
+
+    # 1) get all regs for this email
+    regs = list(db.registrations.find({"student_email": student_email}))
+    if not regs:
+        return "You don’t have any registered courses right now."
+
+    # 2) collect course_ids from those regs
+    course_ids = []
+    for r in regs:
+        cid = r.get("course_id")
+        if cid:
+            course_ids.append(ObjectId(cid))
+
+    # 3) fetch ONLY those courses from the main catalog
+    student_courses = list(db.courses.find({"_id": {"$in": course_ids}}))
+
+    qlow = question.lower()
+
+    # A. user asks "list my courses"
+    if "list" in qlow or "my courses" in qlow or "registered" in qlow:
+        lines = ["Here are your registered courses:"]
+        for c in student_courses:
+            lines.append(
+                f"- {c.get('title')} ({c.get('details')}) • {c.get('term')}")
+        return "\n".join(lines)
+
+    # B. user asks about a specific course
+    for c in student_courses:
+        title = (c.get("title") or "").lower()
+        details = (c.get("details") or "").lower()
+
+        # match by title
+        if title and title in qlow:
+            return format_course_answer(c)
+
+        # match by code part of details (like "COSC 6326")
+        code = details.split(",")[0] if details else ""
+        if code and code.lower() in qlow:
+            return format_course_answer(c)
+
+    # 7) try materials for THESE courses (runs only if we didn't return above)
+    student_course_ids = [c["_id"] for c in student_courses]
+    mats = list(
+        db.course_materials.find(
+            {"course_id": {"$in": student_course_ids}, "visible": True}
+        )
+    )
+
+    if mats:
+        for m in mats:
+            title = m.get("title", "").lower()
+            desc = m.get("description", "").lower()
+            if title and title in qlow or desc and desc in qlow:
+                link_part = f"Link: {m['file_path']}" if m.get(
+                    "file_path") else ""
+                return f"{m.get('title','Material')}: {m.get('description','')} {link_part}".strip()
+
+        # later you can plug RAG here
+        # answer = rag_over_materials(question, mats)
+        # if answer:
+        #     return answer
+
+    # C. fallback
+    return "You’re in student mode. Ask 'list my courses' or the name/code of one of your courses."
+
+
+def format_course_answer(c):
+    return (
+        f"{c.get('title')} ({c.get('details')})\n"
+        f"Term: {c.get('term')}\n"
+        f"Schedule type: {c.get('schedule_type')}\n"
+        f"Hours: {c.get('hours')}"
+    )
+
+# Streaming version of chat_question
+
+
+@app.post("/chat_question_stream")
+async def chat_question_stream(question: str = Form(...)):
+    from rag_pipeline import get_answer_stream
+
+    async def event_generator():
+        # Collect full answer for followup generation
+        full_answer = ""
+
+        # Stream the answer chunks
+        for chunk in get_answer_stream(question):
+            full_answer += chunk
+            # Send each chunk as SSE (Server-Sent Events)
+            yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+
+        # Generate followups after answer is complete
+        chips, suggest_live_chat, fu_source = build_llm_style_followups(
+            user_question=question,
+            answer_text=full_answer or "",
+            k=4
+        )
+
+        if suggest_live_chat:
+            chips.append({"label": "Talk to an admin", "payload": {
+                         "type": "action", "action": "escalate"}})
+
+        # Send followups
+        followup_data = {
+            "type": "followups",
+            "suggest_live_chat": suggest_live_chat,
+            "suggested_followups": chips
+        }
+
+        if DEBUG_FOLLOWUPS:
+            followup_data["followup_generator"] = fu_source
+
+        yield f"data: {json.dumps(followup_data)}\n\n"
+
+        # Send done signal
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 # ======================================================================================
@@ -681,6 +1385,55 @@ async def create_ticket(ticket: TicketCreateRequest, user: dict = Depends(get_cu
         print(f"Error creating ticket: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ---------- Google OAuth2 Routes ----------
+
+@app.get("/login/google")
+async def login_with_google(request: Request):
+    redirect_uri = "http://localhost:8000/auth/google/callback"
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+
+@app.get("/auth/google/callback")
+async def auth_google_callback(request: Request):
+    token = await oauth.google.authorize_access_token(request)
+    user_info = token.get("userinfo")
+
+    if user_info:
+        # Check if user exists in the database
+        user = users_collection.find_one({"email": user_info["email"]})
+
+        if not user:
+            # Register the user if they don't exist
+            users_collection.insert_one({
+                "full_name": user_info.get("name"),
+                "email": user_info.get("email"),
+                "role": "guest",  # Default role for Google SSO users
+                "created_at": datetime.utcnow()
+            })
+
+        # Store user info in the session
+        request.session["user"] = {
+            "full_name": user_info.get("name"),
+            "email": user_info.get("email"),
+            "role": user.get("role", "guest") if user else "guest"
+        }
+
+        # Redirect to the appropriate dashboard
+        return RedirectResponse(url="/guest_home")
+
+    return RedirectResponse(url="/login")
+
+# Ensure session is completely cleared on logout
+
+
+@app.get("/logout")
+async def logout(request: Request):
+    request.session.clear()  # Clear the session completely
+    # Debug log to confirm session is empty
+    print("[DEBUG] Session after clearing:", request.session)
+    return RedirectResponse(url="/login")
+
 # API endpoint to fetch courses by term
 
 
@@ -689,8 +1442,221 @@ def get_courses(term: str):
     courses = list(db.courses.find({"term": term}))
     return convert_objectid_to_str(courses)
 
+# Helper function to convert ObjectId to string
+
+
+def convert_objectid_to_str(doc):
+    if isinstance(doc, list):
+        return [convert_objectid_to_str(d) for d in doc]
+    elif isinstance(doc, dict):
+        return {k: convert_objectid_to_str(v) for k, v in doc.items()}
+    elif isinstance(doc, ObjectId):
+        return str(doc)
+    return doc
+
+# Define a Pydantic model for course registration
+
+
+class CourseRegistration(BaseModel):
+    student_email: str
+    course_id: str
+    term: str
+
+# Updated API endpoint to register a student for a course
+
+
+@app.post("/api/register_course")
+def register_course(registration: CourseRegistration):
+    try:
+        # Validate the registration data
+        registration_data = registration.dict()
+        db.registrations.insert_one(registration_data)
+        return {"message": "Registration successful"}
+    except ValidationError as e:
+        return JSONResponse({"error": "Invalid registration data", "details": e.errors()}, status_code=422)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# API endpoint to fetch registered courses for a student
+
+
+@app.get("/api/registered_courses/{student_email}")
+def get_registered_courses(student_email: str):
+    # 1) get all registrations for this student
+    registrations = list(db.registrations.find(
+        {"student_email": student_email}))
+
+    if not registrations:
+        return []
+
+    # 2) collect course_ids from regs
+    course_ids = []
+    for reg in registrations:
+        cid = reg.get("course_id")
+        if cid:
+            course_ids.append(ObjectId(cid))
+
+    # 3) fetch all those courses in ONE query
+    courses = list(db.courses.find({"_id": {"$in": course_ids}}))
+    # make a dict for quick lookup
+    courses_by_id = {str(c["_id"]): c for c in courses}
+
+    # 4) fetch all materials for these courses
+    materials = list(
+        db.course_materials.find(
+            {"course_id": {"$in": course_ids}, "visible": True}
+        )
+    )
+    # group materials by course_id (as string)
+    mats_by_course: dict[str, list] = {}
+    for m in materials:
+        cid_str = str(m["course_id"])
+        m["_id"] = str(m["_id"])
+        m["course_id"] = cid_str
+        mats_by_course.setdefault(cid_str, []).append(m)
+
+    # 5) build final response
+    registered_courses = []
+    for reg in registrations:
+        reg["_id"] = str(reg["_id"])
+        cid_str = reg.get("course_id")
+
+        # attach course details
+        course = courses_by_id.get(cid_str)
+        if course:
+            reg["course_details"] = {
+                "title": course.get("title", "N/A"),
+                "details": course.get("details", "N/A"),
+                "hours": course.get("hours", "N/A"),
+                "crn": course.get("crn", "N/A"),
+                "schedule_type": course.get("schedule_type", "N/A"),
+                "grade_mode": course.get("grade_mode", "N/A"),
+                "level": course.get("level", "N/A"),
+                "part_of_term": course.get("part_of_term", "N/A"),
+            }
+        else:
+            reg["course_details"] = {}
+
+        # 👇 NEW: attach materials for this course
+        reg["materials"] = mats_by_course.get(cid_str, [])
+
+        registered_courses.append(reg)
+
+    return registered_courses
+
+# API endpoint to fetch student data
+
+
+@app.get("/api/student/{email}")
+def get_student(email: str):
+    student = db.users.find_one({"email": email})
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    student["_id"] = str(student["_id"])  # Convert ObjectId to string
+    return student
+
+# Define a Pydantic model for student data
+
+
+class StudentUpdate(BaseModel):
+    first_name: str
+    last_name: str
+    date_of_birth: str
+    marital_status: str
+    legal_sex: str
+    email: str
+    phone_number: str
+    address: str
+
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("update_student")
+
+# Add a test log at the start of the file to verify logging
+logger.info("Test log: Logging is working.")
+
+# Updated API endpoint to update student data with full_name auto-generation
+
+
+@app.put("/api/student/{email}")
+def update_student(email: str, student_data: StudentUpdate):
+    try:
+        logger.info(f"Received update request for email: {email}")
+        logger.info(f"Request payload: {student_data.dict()}")
+
+        # Generate full_name separately
+        full_name = f"{student_data.first_name} {student_data.last_name}".strip()
+
+        # Update the database with the student data and full_name
+        update_data = student_data.dict()
+        update_data["full_name"] = full_name
+
+        result = db.users.update_one(
+            {"email": email}, {"$set": update_data}, upsert=True)
+        if result.modified_count == 0 and not result.upserted_id:
+            logger.error("Failed to update student data in the database.")
+            raise HTTPException(
+                status_code=400, detail="Failed to update student data")
+
+        logger.info("Student data updated successfully.")
+        return {"message": "Student data updated successfully"}
+    except Exception as e:
+        logger.exception("An error occurred while updating student data.")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# API endpoint to fetch registered classes for a student
+
+
+@app.get("/api/student/{email}/registered_classes")
+def get_registered_classes(email: str):
+    registrations = list(db.registrations.find({"student_email": email}))
+    registered_classes = []
+
+    for registration in registrations:
+        course = db.courses.find_one(
+            {"_id": ObjectId(registration["course_id"])})
+        if course:
+            course["_id"] = str(course["_id"])  # Convert ObjectId to string
+            registration["course_details"] = course
+        # Convert ObjectId to string
+        registration["_id"] = str(registration["_id"])
+        registered_classes.append(registration)
+
+    return registered_classes
+
+# API endpoint to get all staff members (for admin to assign tickets)
+
+
+@app.get("/api/staff")
+def get_all_staff():
+    try:
+        staff_members = list(db.users.find(
+            {"role": "staff", "status": "active"},
+            {"password": 0}  # Exclude password from response
+        ))
+        return convert_objectid_to_str(staff_members)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# API endpoint to get staff by department
+
+
+@app.get("/api/staff/department/{department}")
+def get_staff_by_department(department: str):
+    try:
+        staff_members = list(db.users.find(
+            {"role": "staff", "department": department, "status": "active"},
+            {"password": 0}
+        ))
+        return convert_objectid_to_str(staff_members)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # API endpoint to assign ticket to staff
+
+
 @app.put("/api/tickets/{ticket_id}/assign")
 def assign_ticket(ticket_id: str, staff_email: str):
     try:
@@ -762,452 +1728,6 @@ async def update_ticket(ticket_id: str, request: Request):
         return {"message": "Ticket updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-# Helper function to convert ObjectId to string
-
-
-def convert_objectid_to_str(doc):
-    if isinstance(doc, list):
-        return [convert_objectid_to_str(d) for d in doc]
-    elif isinstance(doc, dict):
-        return {k: convert_objectid_to_str(v) for k, v in doc.items()}
-    elif isinstance(doc, ObjectId):
-        return str(doc)
-    return doc
-
-# Define a Pydantic model for course registration
-
-
-class CourseRegistration(BaseModel):
-    student_email: str
-    course_id: str
-    term: str
-
-# Updated API endpoint to register a student for a course
-
-
-@app.post("/api/register_course")
-def register_course(registration: CourseRegistration):
-    try:
-        # Validate the registration data
-        registration_data = registration.dict()
-        db.registrations.insert_one(registration_data)
-        return {"message": "Registration successful"}
-    except ValidationError as e:
-        return JSONResponse({"error": "Invalid registration data", "details": e.errors()}, status_code=422)
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-# API endpoint to get all staff members (for admin to assign tickets)
-
-
-@app.get("/api/staff")
-def get_all_staff():
-    try:
-        staff_members = list(db.users.find(
-            {"role": "staff", "status": "active"},
-            {"password": 0}  # Exclude password from response
-        ))
-        return convert_objectid_to_str(staff_members)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# API endpoint to get staff by department
-
-
-@app.get("/api/staff/department/{department}")
-def get_staff_by_department(department: str):
-    try:
-        staff_members = list(db.users.find(
-            {"role": "staff", "department": department, "status": "active"},
-            {"password": 0}
-        ))
-        return convert_objectid_to_str(staff_members)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# API endpoint to fetch student data
-@app.get("/api/student/{email}")
-def get_student(email: str):
-    student = db.users.find_one({"email": email})
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found")
-    student["_id"] = str(student["_id"])  # Convert ObjectId to string
-    return student
-
-# Define a Pydantic model for student data
-
-
-class StudentUpdate(BaseModel):
-    first_name: str
-    last_name: str
-    date_of_birth: str
-    marital_status: str
-    legal_sex: str
-    email: str
-    phone_number: str
-    address: str
-
-
-# Updated API endpoint to update student data with full_name auto-generation
-@app.put("/api/student/{email}")
-def update_student(email: str, student_data: StudentUpdate):
-    try:
-        logger.info(f"Received update request for email: {email}")
-        logger.info(f"Request payload: {student_data.dict()}")
-
-        # Generate full_name separately
-        full_name = f"{student_data.first_name} {student_data.last_name}".strip()
-
-        # Update the database with the student data and full_name
-        update_data = student_data.dict()
-        update_data["full_name"] = full_name
-
-        result = db.users.update_one(
-            {"email": email}, {"$set": update_data}, upsert=True)
-        if result.modified_count == 0 and not result.upserted_id:
-            logger.error("Failed to update student data in the database.")
-            raise HTTPException(
-                status_code=400, detail="Failed to update student data")
-
-        logger.info("Student data updated successfully.")
-        return {"message": "Student data updated successfully"}
-    except Exception as e:
-        logger.exception("An error occurred while updating student data.")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-# API endpoint to fetch registered classes for a student
-
-
-@app.get("/api/student/{email}/registered_classes")
-def get_registered_classes(email: str):
-    registrations = list(db.registrations.find({"student_email": email}))
-    registered_classes = []
-
-    for registration in registrations:
-        course = db.courses.find_one(
-            {"_id": ObjectId(registration["course_id"])})
-        if course:
-            course["_id"] = str(course["_id"])  # Convert ObjectId to string
-            registration["course_details"] = course
-        # Convert ObjectId to string
-        registration["_id"] = str(registration["_id"])
-        registered_classes.append(registration)
-
-    return registered_classes
-
-# API endpoint to fetch registered courses for a student
-
-
-@app.get("/api/registered_courses/{student_email}")
-def get_registered_courses(student_email: str):
-    registrations = list(db.registrations.find(
-        {"student_email": student_email}))
-    registered_courses = []
-
-    for registration in registrations:
-        course = db.courses.find_one(
-            {"_id": ObjectId(registration["course_id"])})
-        if course:
-            course["_id"] = str(course["_id"])  # Convert ObjectId to string
-            registration["course_details"] = {
-                "title": course.get("title", "N/A"),
-                "details": course.get("details", "N/A"),
-                "hours": course.get("hours", "N/A"),
-                "crn": course.get("crn", "N/A"),
-                "schedule_type": course.get("schedule_type", "N/A"),
-                "grade_mode": course.get("grade_mode", "N/A"),
-                "level": course.get("level", "N/A"),
-                "part_of_term": course.get("part_of_term", "N/A"),
-            }
-        # Convert ObjectId to string
-        registration["_id"] = str(registration["_id"])
-        registered_courses.append(registration)
-
-    return registered_courses
-
-# ------------------ Ticket & Appointment Endpoints ------------------
-
-
-@app.post("/book_appointment")
-async def book_appointment(
-    type: str = Form(...),
-    date: str = Form(...),
-    time: str = Form(...),
-    notes: str = Form(""),
-    attachment: UploadFile | None = File(None)
-):
-    if not type or not date or not time:
-        return JSONResponse({"success": False, "error": "Missing required fields"}, status_code=400)
-
-    appt = {
-        "type": type,
-        "date": date,
-        "time": time,
-        "notes": notes,
-        "status": "scheduled"
-    }
-
-    try:
-        inserted_id = save_appointment(appt, attachment)
-        print(
-            f"[DEBUG] /book_appointment: inserted_id={inserted_id} attachment_present={attachment is not None}")
-        return {"success": True, "appointment_id": str(inserted_id)}
-    except Exception as e:
-        print(f"[ERROR] /book_appointment exception: {e}")
-        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
-
-
-def save_appointment(appt: dict, attachment: UploadFile | None = None):
-    # store appointment in MongoDB; if attachment provided, save in GridFS and reference file id
-    if attachment is not None:
-        try:
-            content = attachment.file.read()
-            file_id = fs.put(content, filename=attachment.filename,
-                             contentType=attachment.content_type)
-            appt["attachment_id"] = file_id
-            appt["attachment_name"] = attachment.filename
-            appt["attachment_content_type"] = attachment.content_type
-        except Exception as e:
-            appt["attachment_error"] = f"failed to save to gridfs: {e}"
-
-    result = db.appointments.insert_one(appt)
-    inserted_id = result.inserted_id
-
-# Cancel an appointment
-
-
-@app.post("/api/appointments/cancel/{appointment_id}")
-async def cancel_appointment(appointment_id: str):
-    try:
-        result = db.appointments.update_one(
-            {"_id": ObjectId(appointment_id)},
-            {"$set": {"status": "Cancelled"}}
-        )
-        if result.modified_count == 1:
-            return {"success": True, "message": "Appointment cancelled successfully."}
-        return {"success": False, "message": "Appointment not found or already cancelled."}
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-# Reschedule an appointment
-
-
-@app.post("/api/appointments/reschedule/{appointment_id}")
-async def reschedule_appointment(appointment_id: str, new_date: str, new_time: str):
-    try:
-        result = db.appointments.update_one(
-            {"_id": ObjectId(appointment_id)},
-            {"$set": {"date": new_date, "time": new_time,
-                      "status": "Pending Confirmation"}}
-        )
-        if result.modified_count == 1:
-            return {"success": True, "message": "Appointment rescheduled successfully."}
-        return {"success": False, "message": "Appointment not found or could not be rescheduled."}
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-# Return list of appointments; if upcoming=true, only return date >= today
-@app.get("/api/appointments")
-async def api_appointments(upcoming: bool = False):
-    try:
-        # Exclude cancelled appointments
-        query = {"status": {"$ne": "Cancelled"}}
-        if upcoming:
-            today = date.today().isoformat()
-            query["date"] = {"$gte": today}
-        docs = list(db.appointments.find(
-            query).sort([("date", 1), ("time", 1)]))
-        out = []
-        for d in docs:
-            d["_id"] = str(d["_id"])
-            d["status"] = d.get("status", "Pending")
-            if d["status"] == "Confirmed":
-                appointment_date = datetime.strptime(
-                    d["date"], "%Y-%m-%d").date()
-                days_left = (appointment_date - date.today()).days
-                d["countdown"] = f"In {days_left} days" if days_left > 0 else "Today"
-            d["location_mode"] = d.get("location_mode", "Unknown")
-            if "attachment_id" in d:
-                d["attachment_id"] = str(d["attachment_id"])
-            out.append(d)
-        return {"count": len(out), "appointments": out}
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-# Download GridFS attachment by id
-@app.get("/api/attachment/{file_id}")
-async def api_attachment(file_id: str):
-    try:
-        grid_out = fs.get(ObjectId(file_id))
-        data = grid_out.read()
-        return StreamingResponse(io.BytesIO(data), media_type=(grid_out.content_type or "application/octet-stream"), headers={"Content-Disposition": f"attachment; filename=\"{grid_out.filename or file_id}\""})
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=404)
-
-
-@app.get("/api/user")
-async def get_user_details(request: Request):
-    try:
-        user = request.session.get("user")
-        print("[DEBUG] User details from session:", user)  # Debug log
-        if user:
-            return {
-                "full_name": user.get("full_name"),
-                "email": user.get("email"),
-                "role": user.get("role")
-            }
-        return JSONResponse({"error": "User not logged in"}, status_code=401)
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-@app.get("/api/stats")
-async def get_stats():
-    try:
-        knowledge_articles_count = db.knowledge_base.count_documents({})
-        departments_count = db.departments.count_documents(
-            {"status": "active"})
-        total_users_count = db.users.count_documents({})
-        upcoming_appointments_count = db.appointments.count_documents({
-            "status": {"$ne": "Cancelled"},
-            "date": {"$gte": date.today().isoformat()}
-        })
-
-        return {
-            "knowledge_articles": knowledge_articles_count,
-            "departments": departments_count,
-            "total_users": total_users_count,
-            "upcoming_appointments": upcoming_appointments_count
-        }
-    except Exception as e:
-        print(f"Error fetching stats: {e}")
-        return {
-            "knowledge_articles": 0,
-            "departments": 0,
-            "total_users": 0,
-            "upcoming_appointments": 0
-        }
-
-
-@app.get("/api/knowledge_base")
-async def get_knowledge_base():
-    try:
-        articles = list(db.knowledge_base.find({}, {"_id": 0}))
-        return {"articles": articles}
-    except Exception as e:
-        print(f"Error fetching knowledge base articles: {e}")
-        return {"articles": []}
-
-
-@app.post("/api/knowledge_base")
-async def add_knowledge_article(request: Request):
-    data = await request.json()
-    category = data.get("category")
-    title = data.get("title")
-    url = data.get("url")
-
-    if not category or not title or not url:
-        return JSONResponse({"error": "All fields are required."}, status_code=400)
-
-    try:
-        # Extract content from the URL automatically
-        from extract_web_content_to_mongo import extract_page, save_to_db
-        article = extract_page(url, category, title)
-        if not article:
-            return JSONResponse({"error": "Failed to fetch content from URL."}, status_code=400)
-
-        # Save to MongoDB
-        save_to_db(article)
-        return JSONResponse({"message": "Article added successfully."}, status_code=201)
-    except Exception as e:
-        print(f"Error adding article: {e}")
-        return JSONResponse({"error": "Internal server error."}, status_code=500)
-
-
-# ======================================================================================
-#                                  BOT ENDPOINT
-# ======================================================================================
-@app.post("/chat_question")
-async def chat_question(question: str = Form(...)):
-    from rag_pipeline import get_answer
-    answer, _ = get_answer(question)
-
-    chips, suggest_live_chat, fu_source = build_llm_style_followups(
-        user_question=question,
-        answer_text=answer or "",
-        k=4
-    )
-
-    if suggest_live_chat:
-        chips.append({"label": "Talk to an admin", "payload": {
-                     "type": "action", "action": "escalate"}})
-
-    resp = {
-        "answer": answer,
-        "suggest_live_chat": suggest_live_chat,
-        "suggested_followups": chips
-    }
-    if DEBUG_FOLLOWUPS:
-        # "openai" | "fallback" | "fallback_error"
-        resp["followup_generator"] = fu_source
-    return resp
-
-
-# Streaming version of chat_question
-@app.post("/chat_question_stream")
-async def chat_question_stream(question: str = Form(...)):
-    from rag_pipeline import get_answer_stream
-
-    async def event_generator():
-        # Collect full answer for followup generation
-        full_answer = ""
-
-        # Stream the answer chunks
-        for chunk in get_answer_stream(question):
-            full_answer += chunk
-            # Send each chunk as SSE (Server-Sent Events)
-            yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-
-        # Generate followups after answer is complete
-        chips, suggest_live_chat, fu_source = build_llm_style_followups(
-            user_question=question,
-            answer_text=full_answer or "",
-            k=4
-        )
-
-        if suggest_live_chat:
-            chips.append({"label": "Talk to an admin", "payload": {
-                         "type": "action", "action": "escalate"}})
-
-        # Send followups
-        followup_data = {
-            "type": "followups",
-            "suggest_live_chat": suggest_live_chat,
-            "suggested_followups": chips
-        }
-
-        if DEBUG_FOLLOWUPS:
-            followup_data["followup_generator"] = fu_source
-
-        yield f"data: {json.dumps(followup_data)}\n\n"
-
-        # Send done signal
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
-        }
-    )
 
 
 # ==================== DEPARTMENTS MANAGEMENT ====================
@@ -1311,3 +1831,182 @@ async def delete_department(department_id: str):
         return {"message": "Department deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/materials/all")
+async def get_all_materials(request: Request):
+    user = request.session.get("user")
+    if not user or user.get("role") not in ("staff", "admin"):
+        raise HTTPException(403, "Not allowed")
+
+    mats = list(db.course_materials.find({}).sort("uploaded_at", -1))
+    # get titles for each course
+    course_ids = list({m["course_id"] for m in mats})
+    courses = {c["_id"]: c for c in db.courses.find(
+        {"_id": {"$in": course_ids}})}
+
+    out = []
+    for m in mats:
+        m["_id"] = str(m["_id"])
+        cid = m["course_id"]
+        m["course_id"] = str(cid)
+        course = courses.get(cid)
+        m["course_title"] = course["title"] if course else "Unknown course"
+        out.append(m)
+    return out
+
+
+# --- 1. return ALL courses (used as fallback by staff page) ---
+
+@app.get("/api/courses")
+def get_all_courses():
+    courses = list(db.courses.find({}))
+    return [
+        {
+            "_id": str(c["_id"]),
+            "title": c.get("title"),
+            "details": c.get("details"),
+            "term": c.get("term"),
+        }
+        for c in courses
+    ]
+
+
+# --- 2. return ONLY this staff member's courses ---
+
+
+@app.get("/api/courses/my")
+def get_my_courses(request: Request):
+    # 1) who is logged in?
+    user = request.session.get("user")
+    if not user or user.get("role") not in ("staff", "admin"):
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    staff_email = user["email"]
+
+    # 2) DEBUG: show what we are about to search
+    print(">>> /api/courses/my called for:", staff_email)
+    logger.info("hy fuck you")
+
+    # 3) find courses where this email is in staff_emails
+    # (this matches what we saw in /api/debug/courses)
+    cursor = db.courses.find({"staff_emails": staff_email})
+    courses = list(cursor)
+
+    # 4) DEBUG: how many did we get?
+    print(">>> matched courses:", len(courses))
+
+    # 5) if none, return a helpful payload instead of []
+    if not courses:
+        sample = list(db.courses.find({}).limit(10))
+        print(">>> sample from db (first 10):", sample)
+        return {
+            "message": "no courses matched staff_emails",
+            "staff_email_used": staff_email,
+            "note": "this means the query ran, but none of the course docs in THIS database have this staff in staff_emails",
+            "sample_courses": [
+                {
+                    "_id": str(c["_id"]),
+                    "title": c.get("title"),
+                    "staff_emails": c.get("staff_emails"),
+                }
+                for c in sample
+            ],
+        }
+
+    # 6) otherwise return clean list
+    return [
+        {
+            "_id": str(c["_id"]),
+            "title": c.get("title"),
+            "details": c.get("details"),
+            "term": c.get("term"),
+        }
+        for c in courses
+    ]
+
+
+# staff creates material
+
+@app.post("/api/materials")
+async def create_course_material(
+    request: Request,
+    course_id: str = Form(...),
+    title: str = Form(...),
+    description: str = Form(""),
+    file: UploadFile | None = File(None),
+    external_url: str = Form("", description="optional external link"),
+):
+    user = request.session.get("user")
+    if not user or user.get("role") not in ("staff", "admin"):
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    # make sure course exists
+    course = db.courses.find_one({"_id": ObjectId(course_id)})
+    if not course:
+        raise HTTPException(404, "Course not found")
+
+    saved_path = None
+    file_type = None
+
+    # if staff uploaded an actual file
+    if file:
+        contents = await file.read()
+        saved_path = f"uploads/{file.filename}"
+        with open(saved_path, "wb") as f:
+            f.write(contents)
+        file_type = file.content_type or "application/octet-stream"
+    elif external_url:
+        saved_path = external_url
+        file_type = "link"
+
+    doc = {
+        "course_id": ObjectId(course_id),
+        "title": title,
+        "description": description,
+        "file_path": saved_path,
+        "file_type": file_type,
+        "uploaded_by": user["email"],
+        "uploaded_at": datetime.utcnow(),
+        "visible": True,
+    }
+    db.course_materials.insert_one(doc)
+    return {"ok": True, "material_id": str(doc["_id"])}
+
+
+@app.get("/api/debug/courses")
+def debug_courses(request: Request):
+    user = request.session.get("user")
+    # get all courses the backend is ACTUALLY seeing
+    courses = list(db.courses.find({}))
+    # keep it light
+    preview = []
+    for c in courses[:10]:
+        preview.append({
+            "_id": str(c["_id"]),
+            "title": c.get("title"),
+            "details": c.get("details"),
+            "term": c.get("term"),
+            "staff_emails": c.get("staff_emails"),
+        })
+    return {
+        "session_user": user,
+        "courses_count": len(courses),
+        "courses_preview": preview,
+    }
+
+
+# get materials for a course
+@app.get("/api/materials/by_course/{course_id}")
+async def get_materials_by_course(course_id: str):
+    mats = list(db.course_materials.find({
+        "course_id": ObjectId(course_id),
+        "visible": True
+    }).sort("uploaded_at", -1))
+    # convert ObjectId -> str
+    out = []
+    for m in mats:
+        m["_id"] = str(m["_id"])
+        m["course_id"] = str(m["course_id"])
+        out.append(m)
+    return out

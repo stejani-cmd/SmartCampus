@@ -10,7 +10,7 @@ services:
       PYTHONUNBUFFERED: "1"
       WATCHFILES_FORCE_POLLING: "1"
       # If you made the code read from env:
-      MONGODB_URI: mongodb://mongo:27017/SmartCampus
+      # MONGODB_URI is provided via .env (env_file) so it can point to Atlas or local mongo.
       # OPENAI_API_KEY: ...
       # HF_TOKEN: ...
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -28,7 +28,7 @@ services:
   mongo:
     image: mongo:7
     environment:
-      MONGO_INITDB_DATABASE: SmartCampus
+      MONGO_INITDB_DATABASE: smartassist
     volumes:
       - mongo-data:/data/db
     ports:

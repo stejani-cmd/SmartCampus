@@ -43,4 +43,4 @@ EXPOSE 7860
 # VOLUME ["/root/.cache"]
 
 # Default command: uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "${PORT}"]

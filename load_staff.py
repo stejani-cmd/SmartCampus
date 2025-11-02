@@ -7,9 +7,9 @@ import os
 load_dotenv()
 
 # Database connection
-MONGO_URI = os.getenv("MONGODB_URI", "mongodb://mongo:27017/SmartCampus")
+MONGO_URI = os.getenv("MONGODB_URI", "mongodb://mongo:27017/smartassist")
 client = MongoClient(MONGO_URI)
-db = client["SmartCampus"]
+db = client["smartassist"]
 
 # Function to load staff from JSON file and insert into database
 def load_staff_from_json(file_path: str):

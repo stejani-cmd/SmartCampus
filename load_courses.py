@@ -7,9 +7,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Database connection
-MONGO_URI = os.getenv("MONGODB_URI", "mongodb://mongo:27017/SmartCampus")
+MONGO_URI = os.getenv("MONGODB_URI", "mongodb://mongo:27017/smartassist")
 client = pymongo.MongoClient(MONGO_URI)
-db = client["SmartCampus"]
+db = client["smartassist"]
 courses_collection = db["courses"]
 
 # Function to load courses from JSON file and insert into MongoDB

@@ -8,7 +8,10 @@
     "schedule_type": "Lecture",
     "grade_mode": "Normal Grading",
     "level": "Graduate",
-    "part_of_term": "Full Term"
+    "part_of_term": "Full Term",
+    "staff_emails": [
+    "staff1@tamucc.edu"
+  ]
   },
   {
     "term": "Fall 2025",
@@ -19,7 +22,10 @@
     "schedule_type": "Lecture",
     "grade_mode": "Normal Grading",
     "level": "Graduate Doctoral",
-    "part_of_term": "Full Term"
+    "part_of_term": "Full Term",
+    "staff_emails": [
+    "staff1@tamucc.edu"
+  ]
   },
   {
     "term": "Fall 2025",
@@ -30,7 +36,10 @@
     "schedule_type": "Lecture",
     "grade_mode": "Normal Grading",
     "level": "Graduate",
-    "part_of_term": "Full Term"
+    "part_of_term": "Full Term",
+    "staff_emails": [
+    "staff1@tamucc.edu"
+  ]
   },
   {
     "term": "Spring 2025",
@@ -41,7 +50,10 @@
     "schedule_type": "Lecture",
     "grade_mode": "Normal Grading",
     "level": "Graduate",
-    "part_of_term": "Full Term"
+    "part_of_term": "Full Term",
+    "staff_emails": [
+    "staff1@tamucc.edu"
+  ]
   },
   {
     "term": "Spring 2025",
@@ -52,7 +64,11 @@
     "schedule_type": "Lecture",
     "grade_mode": "Normal Grading",
     "level": "Graduate",
-    "part_of_term": "Full Term"
+    "part_of_term": "Full Term",
+    "staff_emails": [
+    "mamta.yadav@tamucc.edu",
+    "staff1@tamucc.edu"
+  ]
   },
   {
     "term": "Spring 2025",
@@ -63,6 +79,10 @@
     "schedule_type": "Independent Study",
     "grade_mode": "Normal Grading",
     "level": "Graduate",
-    "part_of_term": "Full Term"
+    "part_of_term": "Full Term",
+    "staff_emails": [
+    "mamta.yadav@tamucc.edu",
+    "staff1@tamucc.edu"
+  ]
   }
 ]
