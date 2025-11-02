@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SmartAssist | Login</title>
+  <title>SmartCampus | Login</title>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
   <style>
     * {
@@ -125,14 +125,13 @@
   <div class="login-container">
     <div class="login-logo">
       <img src="{{ url_for('static', path='assets/images/logo.png') }}"
-          alt="SmartAssist Logo"
+          alt="SmartCampus Logo"
           class="logo">
     </div>
 
     <!-- University Members Section -->
     <div class="university-login">
-      <h2>University Members</h2>
-      <p>If you are a university student, please register or log in using your credentials.</p>
+      <h2>University Login</h2>
       <form action="/login" method="post">
         <div class="form-group">
           <label>Email</label>
@@ -158,17 +157,7 @@
       </p>
     </div>
 
-    <!-- Guests Section -->
-    <div class="guest-login" style="margin-top: 2rem;">
-      <h2>Guests</h2>
-      <p>If you are a guest, you can sign in using Google.</p>
-      <button onclick="window.location.href='/login/google'" 
-              style="width: 100%; background: #DB4437; color: #fff; border: none; padding: 12px; border-radius: 8px; font-size: 1rem; cursor: pointer; transition: 0.3s;">
-        Sign in with Google
-      </button>
-    </div>
-
-    <p class="footer-text">© 2025 TAMU-CC SmartAssist</p>
+    <p class="footer-text">© 2025 TAMU-CC SmartCampus</p>
   </div>
 
   <script>

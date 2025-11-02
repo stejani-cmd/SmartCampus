@@ -681,7 +681,6 @@ async def post_register(
     email: str = Form(...),
     password: str = Form(...),
     confirm_password: str = Form(...),
-    role: str = Form(...)           # keep required (see form below)
 ):
     if password != confirm_password:
         return templates.TemplateResponse(
@@ -699,7 +698,7 @@ async def post_register(
         "full_name": full_name,
         "email": email,
         "password": password,       # TODO: hash this
-        "role": role
+        "role": "student"           # default role
     })
     return templates.TemplateResponse(
         "login.html",
