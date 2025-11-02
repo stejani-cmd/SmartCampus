@@ -1,53 +1,129 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartAssist | Register</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Poppins', sans-serif; }
+    body {
+      background: linear-gradient(135deg, #0067A5, #00A99D);
+      height: 100vh; display: flex; align-items: center; justify-content: center;
+    }
+    .register-container {
+      background: #fff; border-radius: 16px; box-shadow: 0 6px 25px rgba(0,0,0,0.15);
+      width: 90%; max-width: 450px; padding: 2.5rem; text-align: center; animation: fadeIn 1s ease;
+    }
+    @keyframes fadeIn { from {opacity:0; transform:translateY(-15px);} to {opacity:1; transform:translateY(0);} }
+    .logo img { width: 100px; margin-bottom: 15px; }
+    h2 { color: #0067A5; margin-bottom: 1.5rem; font-weight: 600; font-size: 1.6rem; }
+    .form-group { text-align: left; margin-bottom: 1.3rem; }
+    label { font-size: 0.95rem; color: #333; }
+    input, select {
+      width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #ccc; margin-top: 6px; font-size: 1rem; transition: 0.3s;
+    }
+    input:focus, select:focus { border-color: #00A99D; outline: none; box-shadow: 0 0 5px #00A99D; }
+    .register-btn {
+      width: 100%; background: #0067A5; color: #fff; border: none; padding: 14px;
+      border-radius: 10px; font-size: 1.1rem; cursor: pointer; transition: 0.3s; margin-top: 1.2rem;
+    }
+    .register-btn:hover { background: #00A99D; }
+    .footer-text { margin-top: 1rem; font-size: 0.88rem; color: #555; }
+    .footer-text a { color: #0067A5; font-weight: 600; text-decoration: none; }
+    .footer-text a:hover { text-decoration: underline; }
+    .message { margin-bottom: 1rem; font-size: 0.9rem; }
+    .error { color: red; }
+    .success { color: green; }
+    @media (max-width: 480px) { .register-container { padding: 2rem; } }
+  </style>
+</head>
 
-{% block title %}SmartCampus | Register{% endblock %}
-
-{% block extra_css %}
-  <link rel="stylesheet" href="{{ url_for('static', path='css/auth.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', path='css/register.css') }}">
-{% endblock %}
-
-{% block content %}
-  <div class="auth-bg">
-    <div class="auth-card register-card">
-      <div class="auth-logo">
-        <img src="{{ url_for('static', path='assets/images/logo.png') }}"
-             alt="SmartCampus Logo">
-      </div>
-
-      <h2 class="auth-title">Create an Account</h2>
-
-      {% if error %}
-        <div class="auth-message error">{{ error }}</div>
-      {% elif message %}
-        <div class="auth-message success">{{ message }}</div>
-      {% endif %}
-
-      <form action="/register" method="post" class="auth-form">
-        <div class="form-group">
-          <label>Full Name</label>
-          <input type="text" name="full_name" placeholder="John Doe" required />
-        </div>
-        <div class="form-group">
-          <label>Email</label>
-          <input type="email" name="email" placeholder="john@tamucc.edu" required />
-        </div>
-        <div class="form-group">
-          <label>Password</label>
-          <input type="password" name="password" placeholder="Enter your password" required />
-        </div>
-        <div class="form-group">
-          <label>Confirm Password</label>
-          <input type="password" name="confirm_password" placeholder="Confirm your password" required />
-        </div>
-        <button type="submit" class="register-btn">Register</button>
-      </form>
-
-      <p class="auth-footer-text">
-        Already have an account?
-        <a href="/login">Login here</a>
-      </p>
-      <p class="auth-footer-text">© 2025 TAMU-CC SmartCampus</p>
+<body>
+  <div class="register-container">
+    <div class="logo">
+      <img src="{{ url_for('static', path='assets/images/logo.png') }}"
+          alt="SmartAssist Logo"
+          class="logo">
     </div>
+    <h2>Create an Account</h2>
+
+    <!-- Backend messages -->
+    {% if error %}
+      <div class="message error">{{ error }}</div>
+    {% elif message %}
+      <div class="message success">{{ message }}</div>
+    {% endif %}
+
+    <form action="/register" method="post">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" name="full_name" placeholder="John Doe" required />
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="email" placeholder="john@tamucc.edu" required />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" name="password" placeholder="Enter your password" required />
+      </div>
+      <div class="form-group">
+        <label>Confirm Password</label>
+        <input type="password" name="confirm_password" placeholder="Confirm your password" required />
+      </div>
+      <div class="form-group">
+        <label>Role</label>
+        <select name="role" required>
+          <option value="">Select Role</option>
+          <option value="student">Student</option>
+          <option value="guest">Guest</option>
+        </select>
+      </div>
+      <button type="submit" class="register-btn">Register</button>
+    </form>
+
+    <p class="footer-text">
+      Already have an account? <a href="/login">Login here</a>
+    </p>
+    <p class="footer-text">© 2025 TAMU-CC SmartAssist</p>
   </div>
-{% endblock %}
+
+  <script>
+    document.querySelector('form').addEventListener('submit', function(event) {
+      const email = document.querySelector('input[name="email"]').value;
+      const password = document.querySelector('input[name="password"]').value;
+      const confirmPassword = document.querySelector('input[name="confirm_password"]').value;
+      const role = document.querySelector('select[name="role"]').value;
+
+      // Email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        alert('Please enter a valid email address.');
+        event.preventDefault();
+        return;
+      }
+
+      // Password validation
+      if (password.length < 6) {
+        alert('Password must be at least 6 characters long.');
+        event.preventDefault();
+        return;
+      }
+
+      // Confirm password validation
+      if (password !== confirmPassword) {
+        alert('Passwords do not match.');
+        event.preventDefault();
+        return;
+      }
+
+      // Role validation
+      if (!role) {
+        alert('Please select a role.');
+        event.preventDefault();
+      }
+    });
+  </script>
+</body>
+</html>

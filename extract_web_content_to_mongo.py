@@ -3,10 +3,12 @@ import requests
 from bs4 import BeautifulSoup
 from pymongo import MongoClient
 import re
+import os
 
 # ------------------ MongoDB setup ------------------
-client = MongoClient("mongodb+srv://Manny0715:Manmeet12345@cluster0.1pf6oxg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")  # replace with your MongoDB URL if needed
-db = client.SmartCampus
+MONGO_URI = os.getenv("MONGODB_URI", "mongodb://mongo:27017/smartassist")
+client = MongoClient(MONGO_URI)
+db = client.smartassist
 kb_collection = db.knowledge_base  # collection for articles
 
 # Create unique index on URL to prevent duplicates

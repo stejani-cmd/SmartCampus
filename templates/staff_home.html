@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SmartCampus | Staff Dashboard</title>
+<title>SmartAssist | Staff Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
@@ -85,16 +85,101 @@
     .sidebar { width:100%; flex-direction:row; justify-content:space-around; border-right:none; border-bottom:1px solid #e0e0e0; padding:1rem 0.5rem; }
   }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+  // 1) fill the "Select course..." dropdown using the *working* API
+  async function loadCoursesForStaff() {
+    const select = document.getElementById('material-course');
+
+    // this one we know works
+    const res = await fetch('/api/debug/courses');
+    const data = await res.json();
+
+    const courses = data.courses_preview || [];
+
+    // reset
+    select.innerHTML = '<option value="">Select course...</option>';
+
+    courses.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c._id;
+      opt.textContent = `${c.title} — ${c.details} (${c.term})`;
+      select.appendChild(opt);
+    });
+  }
+
+  // 2) load all materials into the table
+  async function loadMaterialsForAllCourses() {
+    const res = await fetch('/api/materials/all');
+    const materials = await res.json();
+    const tbody = document.getElementById('materials-table-body');
+    tbody.innerHTML = '';
+
+    materials.forEach(m => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${m.course_title || m.course_id}</td>
+        <td>${m.title}</td>
+        <td>${m.uploaded_by}</td>
+        <td>${new Date(m.uploaded_at).toLocaleString()}</td>
+        <td>${m.file_path ? `<a href="${m.file_path}" target="_blank">Open</a>` : ''}</td>
+        <td>
+          <button class="btn btn-respond" onclick="deleteMaterial('${m._id}')">Delete</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // 3) delete material
+  window.deleteMaterial = async function(id) {
+    if (!confirm('Delete this material?')) return;
+    const res = await fetch(`/api/materials/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      loadMaterialsForAllCourses();
+    } else {
+      alert('Failed to delete material');
+    }
+  };
+
+  // 4) handle upload form
+  const form = document.getElementById('material-form');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const res = await fetch('/api/materials', {
+      method: 'POST',
+      body: fd
+    });
+    if (res.ok) {
+      form.reset();
+      loadMaterialsForAllCourses();
+    } else {
+      alert('Failed to upload');
+    }
+  });
+
+  // 5) initial load
+  loadCoursesForStaff();
+  loadMaterialsForAllCourses();
+});
+</script>
+
+
+
 </head>
 <body>
 
 <!-- Navbar -->
 <nav>
-  <h1>SmartCampus</h1>
+  <h1>SmartAssist</h1>
   <div class="nav-links">
     <a href="#">Home</a>
     <a href="#">Tickets</a>
     <a href="#">Appointments</a>
+    <a href="#materials">Course Materials</a>
     <a href="#">Feedback</a>
     <a href="login">Logout</a>
   </div>
@@ -180,6 +265,97 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Course Materials -->
+<div class="table-container" id="materials" style="margin-top: 2rem;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+    <h3 style="margin:0;">Course Materials</h3>
+    <small style="color:#64748b; display:block; margin-bottom:0.25rem;">
+        Showing courses assigned to you
+      </small>
+
+    <small style="color:#4b5563;">Upload materials for your courses</small>
+  </div>
+
+  <!-- Upload form -->
+  <form id="material-form"
+        enctype="multipart/form-data"
+        style="
+          background:#f8fafc;
+          border:1px solid #e2e8f0;
+          border-radius:0.75rem;
+          padding:1rem;
+          display:grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap:0.75rem;
+          margin-bottom:1.25rem;
+        ">
+    <!-- row 1 -->
+    <div style="display:flex; flex-direction:column; gap:0.25rem;">
+      <label for="material-course" style="font-size:0.75rem; font-weight:600;">Course</label>
+      <select id="material-course" name="course_id" required
+              style="padding:0.5rem 0.6rem; border:1px solid #cbd5e1; border-radius:0.5rem;">
+        <option value="">Select course...</option>
+      </select>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:0.25rem;">
+      <label for="material-title" style="font-size:0.75rem; font-weight:600;">Title</label>
+      <input type="text" id="material-title" name="title" placeholder="e.g. Week 1 slides" required
+             style="padding:0.5rem 0.6rem; border:1px solid #cbd5e1; border-radius:0.5rem;">
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:0.25rem;">
+      <label for="material-desc" style="font-size:0.75rem; font-weight:600;">Description</label>
+      <input type="text" id="material-desc" name="description" placeholder="optional"
+             style="padding:0.5rem 0.6rem; border:1px solid #cbd5e1; border-radius:0.5rem;">
+    </div>
+
+    <!-- row 2 -->
+    <div style="display:flex; flex-direction:column; gap:0.25rem;">
+      <label for="material-file" style="font-size:0.75rem; font-weight:600;">Upload file</label>
+      <input type="file" id="material-file" name="file"
+             accept=".pdf,.ppt,.pptx,.doc,.docx"
+             style="padding:0.35rem 0.2rem; border:1px solid #cbd5e1; border-radius:0.5rem; background:white;">
+      <small style="font-size:0.65rem; color:#6b7280;">PDF / PPT / DOC</small>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:0.25rem;">
+      <label for="material-url" style="font-size:0.75rem; font-weight:600;">or external URL</label>
+      <input type="url" id="material-url" name="external_url" placeholder="https://..."
+             style="padding:0.5rem 0.6rem; border:1px solid #cbd5e1; border-radius:0.5rem;">
+    </div>
+
+    <div style="display:flex; align-items:flex-end;">
+      <button type="submit"
+              class="btn btn-respond"
+              style="padding:0.55rem 1.2rem; border-radius:0.5rem;">
+        Upload
+      </button>
+    </div>
+  </form>
+
+  <!-- list -->
+  <div style="overflow-x:auto;">
+    <table style="width:100%; min-width:700px;">
+      <thead>
+        <tr>
+          <th>Course</th>
+          <th>Title</th>
+          <th>Uploaded By</th>
+          <th>Date</th>
+          <th>Link</th>
+          <th style="width:90px;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="materials-table-body">
+        <!-- populated by JS -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
 
   </div>
 </div>
