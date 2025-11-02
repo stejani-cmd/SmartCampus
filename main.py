@@ -1,3 +1,9 @@
+import re
+from fastapi import Request
+from datetime import datetime
+from fastapi import UploadFile, File, HTTPException
+from fastapi import HTTPException, Request
+import anyio
 from fastapi import FastAPI, Request, Form, WebSocket, WebSocketDisconnect, File, UploadFile, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.requests import Request
@@ -19,8 +25,13 @@ from authlib.integrations.starlette_client import OAuth
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel, ValidationError
 import logging
-import os
+from app.utils import get_current_user
 
+from app.routers import auth, pages, forum
+from app.core.config import settings
+import os
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # ---------- env ----------
 load_dotenv()
@@ -59,6 +70,10 @@ def extract_pdf_text(path: str) -> str:
     return "\n".join(parts)
 
 
+# routers
+app.include_router(pages.router)
+app.include_router(auth.router)
+app.include_router(forum.router)
 
 # Configure OAuth for Google
 oauth = OAuth()
@@ -83,7 +98,8 @@ fs = gridfs.GridFS(db)
 
 # Ensure a text index exists for follow-ups (safe to call once)
 try:
-    db.articles.create_index([("title","text"), ("content","text"), ("category","text")])
+    db.articles.create_index(
+        [("title", "text"), ("content", "text"), ("category", "text")])
 except Exception:
     pass
 
@@ -141,35 +157,39 @@ def llm_complete(
             return resp["choices"][0]["message"]["content"].strip()
         except Exception as v0_err:
             # bubble up a unified error so caller can switch to fallback
-            raise RuntimeError(f"OpenAI failed (v1: {v1_err!r}; v0: {v0_err!r})")
+            raise RuntimeError(
+                f"OpenAI failed (v1: {v1_err!r}; v0: {v0_err!r})")
 
 
 # ======================================================================================
 #                        LLM-STYLE, INTENT-LIKE FOLLOW-UPS
 # ======================================================================================
 USE_LLM_FOLLOWUPS = os.getenv("USE_LLM_FOLLOWUPS", "1") == "1"
-FOLLOWUP_MODEL    = os.getenv("FOLLOWUP_MODEL", "gpt-4o-mini")
-DEBUG_FOLLOWUPS   = os.getenv("DEBUG_FOLLOWUPS", "1") == "1"
+FOLLOWUP_MODEL = os.getenv("FOLLOWUP_MODEL", "gpt-4o-mini")
+DEBUG_FOLLOWUPS = os.getenv("DEBUG_FOLLOWUPS", "1") == "1"
 
 ESCALATION_KEYWORDS = {
-    "agent","human","person","representative","talk to someone","talk to admin",
-    "live chat","connect me","escalate","call","phone","help desk","support"
+    "agent", "human", "person", "representative", "talk to someone", "talk to admin",
+    "live chat", "connect me", "escalate", "call", "phone", "help desk", "support"
 }
+
 
 def _wants_human(text: str) -> bool:
     q = (text or "").lower()
     return any(k in q for k in ESCALATION_KEYWORDS)
 
+
 def _mongo_text_search(query: str, limit: int = 8) -> List[Dict]:
     if not (query and query.strip()):
         return []
     cur = (db.articles.find(
-            {"$text": {"$search": query}},
-            {"title": 1, "category": 1, "url": 1, "score": {"$meta": "textScore"}}
-          )
-          .sort([("score", {"$meta": "textScore"})])
-          .limit(limit))
+        {"$text": {"$search": query}},
+        {"title": 1, "category": 1, "url": 1, "score": {"$meta": "textScore"}}
+    )
+        .sort([("score", {"$meta": "textScore"})])
+        .limit(limit))
     return list(cur)
+
 
 def _should_offer_live_chat(user_q: str, answer_text: str, hits: int) -> bool:
     if _wants_human(user_q):
@@ -181,7 +201,6 @@ def _should_offer_live_chat(user_q: str, answer_text: str, hits: int) -> bool:
     a = (answer_text or "").lower()
     return hits == 0 or any(p in a for p in low_conf)
 
-import re
 
 def _safe_json_list(s: str) -> List[str]:
     """
@@ -216,8 +235,8 @@ def _llm_generate_followups(user_q: str, answer_text: str, candidates: List[Dict
     ctx_lines = []
     for c in candidates[:10]:
         t = (c.get("title") or "").strip()
-        u = c.get("url","")
-        cat = c.get("category","")
+        u = c.get("url", "")
+        cat = c.get("category", "")
         if t:
             ctx_lines.append(f"- {t} [{cat}] {u}")
     ctx = "\n".join(ctx_lines) if ctx_lines else "(no candidates)"
@@ -238,7 +257,8 @@ def _llm_generate_followups(user_q: str, answer_text: str, candidates: List[Dict
     )
 
     text = llm_complete(
-        messages=[{"role":"system","content":sys}, {"role":"user","content":usr}],
+        messages=[{"role": "system", "content": sys},
+                  {"role": "user", "content": usr}],
         model=FOLLOWUP_MODEL,
         temperature=0.4,
         max_tokens=180,
@@ -247,13 +267,15 @@ def _llm_generate_followups(user_q: str, answer_text: str, candidates: List[Dict
     uniq, seen = [], set()
     for it in items:
         s = it.strip()
-        if s.endswith("?"): s = s[:-1]
+        if s.endswith("?"):
+            s = s[:-1]
         if s and s.lower() not in seen:
             seen.add(s.lower())
             uniq.append(s)
         if len(uniq) >= k:
             break
     return uniq
+
 
 def build_llm_style_followups(user_question: str, answer_text: str, k: int = 4):
     """
@@ -269,7 +291,8 @@ def build_llm_style_followups(user_question: str, answer_text: str, k: int = 4):
 
     if USE_LLM_FOLLOWUPS and os.getenv("OPENAI_API_KEY"):
         try:
-            suggestions = _llm_generate_followups(user_question, answer_text, hits, k=k)
+            suggestions = _llm_generate_followups(
+                user_question, answer_text, hits, k=k)
             if suggestions:
                 source = "openai"
         except Exception as e:
@@ -279,7 +302,7 @@ def build_llm_style_followups(user_question: str, answer_text: str, k: int = 4):
 
     if not suggestions:
         # graceful fallback: try KB titles, then a tiny curated list
-        base = [h.get("title","") for h in hits[:6] if h.get("title")]
+        base = [h.get("title", "") for h in hits[:6] if h.get("title")]
         suggestions = [s for s in base if s][:k]
         if not suggestions:
             suggestions = [
@@ -289,8 +312,10 @@ def build_llm_style_followups(user_question: str, answer_text: str, k: int = 4):
                 "how to apply for scholarships",
             ][:k]
 
-    chips = [{"label": s, "payload": {"type": "faq", "query": s}} for s in suggestions]
-    suggest_live_chat = _should_offer_live_chat(user_question, answer_text, hits=len(hits))
+    chips = [{"label": s, "payload": {"type": "faq", "query": s}}
+             for s in suggestions]
+    suggest_live_chat = _should_offer_live_chat(
+        user_question, answer_text, hits=len(hits))
     return chips[:k], suggest_live_chat, source
 
 
@@ -302,9 +327,10 @@ def diag_llm():
     try:
         key = os.getenv("OPENAI_API_KEY")
         if not key:
-            raise HTTPException(status_code=500, detail="OPENAI_API_KEY missing")
+            raise HTTPException(
+                status_code=500, detail="OPENAI_API_KEY missing")
         text = llm_complete(
-            messages=[{"role":"system","content":"Return the word OK"}],
+            messages=[{"role": "system", "content": "Return the word OK"}],
             model=FOLLOWUP_MODEL,
             temperature=0.0,
             max_tokens=4,
@@ -312,6 +338,7 @@ def diag_llm():
         return {"ok": True, "model": FOLLOWUP_MODEL, "reply": text}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
 
 print("[BOOT]",
       "USE_LLM_FOLLOWUPS=", USE_LLM_FOLLOWUPS,
@@ -321,7 +348,7 @@ print("[BOOT]",
 # ======================================================================================
 #                                 LIVE CHAT MANAGER
 # ======================================================================================
-import anyio
+
 
 class ChatManager:
     def __init__(self):
@@ -374,7 +401,8 @@ class ChatManager:
                         {"$set": {"student_connected": False, "status": "closed"}}
                     )
                     # remove from admin UI immediately
-                    anyio.from_thread.run(self.broadcast_admins, {"type": "session_removed", "session_id": sid})
+                    anyio.from_thread.run(self.broadcast_admins, {
+                                          "type": "session_removed", "session_id": sid})
                     print(f"❌ Student disconnected: {sid}")
 
     async def send_to_student(self, session_id: str, message: dict):
@@ -389,8 +417,8 @@ class ChatManager:
                 # stale socket
                 pass
 
-manager = ChatManager()
 
+manager = ChatManager()
 
 
 def save_ticket(ticket: dict, attachment: UploadFile | None = None):
@@ -398,7 +426,8 @@ def save_ticket(ticket: dict, attachment: UploadFile | None = None):
     if attachment is not None:
         try:
             content = attachment.file.read()
-            file_id = fs.put(content, filename=attachment.filename, contentType=attachment.content_type)
+            file_id = fs.put(content, filename=attachment.filename,
+                             contentType=attachment.content_type)
             ticket["attachment_id"] = file_id
             ticket["attachment_name"] = attachment.filename
             ticket["attachment_content_type"] = attachment.content_type
@@ -420,6 +449,7 @@ def save_ticket(ticket: dict, attachment: UploadFile | None = None):
         print("[DEBUG] Ticket document (fallback):", debug_doc)
 
     return inserted_id
+
 
 @app.post("/raise_ticket")
 async def raise_ticket(
@@ -443,18 +473,21 @@ async def raise_ticket(
 
     try:
         inserted_id = save_ticket(ticket, attachment)
-        print(f"[DEBUG] /raise_ticket: inserted_id={inserted_id} attachment_present={attachment is not None}")
+        print(
+            f"[DEBUG] /raise_ticket: inserted_id={inserted_id} attachment_present={attachment is not None}")
         return {"success": True, "ticket_id": str(inserted_id)}
     except Exception as e:
         print(f"[ERROR] /raise_ticket exception: {e}")
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
 
 def save_appointment(appt: dict, attachment: UploadFile | None = None):
     # store appointment in MongoDB; if attachment provided, save in GridFS and reference file id
     if attachment is not None:
         try:
             content = attachment.file.read()
-            file_id = fs.put(content, filename=attachment.filename, contentType=attachment.content_type)
+            file_id = fs.put(content, filename=attachment.filename,
+                             contentType=attachment.content_type)
             appt["attachment_id"] = file_id
             appt["attachment_name"] = attachment.filename
             appt["attachment_content_type"] = attachment.content_type
@@ -470,7 +503,8 @@ def save_appointment(appt: dict, attachment: UploadFile | None = None):
         debug_doc["attachment_id"] = str(debug_doc["attachment_id"])
     try:
         print(f"[DEBUG] Inserted appointment id: {inserted_id}")
-        print(f"[DEBUG] Appointment document: {json.dumps(debug_doc, default=str)}")
+        print(
+            f"[DEBUG] Appointment document: {json.dumps(debug_doc, default=str)}")
     except Exception:
         print("[DEBUG] Appointment document (fallback):", debug_doc)
 
@@ -507,8 +541,10 @@ async def student_ws(websocket: WebSocket, session_id: str):
                 })
             else:
                 # Calculate queue position
-                queued_sessions = list(live_chat_sessions.find({"status": "queued"}).sort("created_at", 1))
-                queue_position = next((i + 1 for i, s in enumerate(queued_sessions) if s["session_id"] == session_id), None)
+                queued_sessions = list(live_chat_sessions.find(
+                    {"status": "queued"}).sort("created_at", 1))
+                queue_position = next(
+                    (i + 1 for i, s in enumerate(queued_sessions) if s["session_id"] == session_id), None)
 
                 await manager.broadcast_admins({
                     "type": "queued_ping",
@@ -519,6 +555,7 @@ async def student_ws(websocket: WebSocket, session_id: str):
     except WebSocketDisconnect:
         print(f"[DEBUG] Student disconnected with session_id: {session_id}")
         manager.disconnect(websocket)
+
 
 @app.websocket("/ws/admin")
 async def admin_ws(websocket: WebSocket):
@@ -542,7 +579,8 @@ async def admin_ws(websocket: WebSocket):
                     continue
 
                 res = live_chat_sessions.update_one(
-                    {"session_id": session_id, "status": {"$in": ["queued","live"]}},
+                    {"session_id": session_id, "status": {
+                        "$in": ["queued", "live"]}},
                     {"$set": {"status": "live", "assigned_admin": admin_id}}
                 )
                 if res.matched_count == 0:
@@ -579,7 +617,7 @@ async def admin_ws(websocket: WebSocket):
                 })
 
             else:
-                await websocket.send_json({"type":"error","reason":"Unknown message type."})
+                await websocket.send_json({"type": "error", "reason": "Unknown message type."})
 
     except WebSocketDisconnect:
         print("[DEBUG] Admin disconnected")
@@ -588,6 +626,8 @@ async def admin_ws(websocket: WebSocket):
 # ======================================================================================
 #                                   REST API
 # ======================================================================================
+
+
 @app.get("/api/chat/{session_id}")
 async def get_chat_history(session_id: str):
     print(f"[DEBUG] Fetching chat history for session_id: {session_id}")
@@ -596,6 +636,7 @@ async def get_chat_history(session_id: str):
                     .sort("created_at", 1))
     print(f"[DEBUG] Retrieved messages: {messages}")
     return messages
+
 
 @app.post("/api/chat/{session_id}/escalate")
 async def escalate(session_id: str):
@@ -616,6 +657,7 @@ async def escalate(session_id: str):
     })
     return {"ok": True}
 
+
 @app.post("/api/chat/{session_id}/end")
 async def end_chat(session_id: str):
     live_chat_sessions.update_one(
@@ -630,32 +672,39 @@ async def end_chat(session_id: str):
     await manager.broadcast_admins({"type": "session_removed", "session_id": session_id})
     return {"ok": True}
 
+
 @app.get("/api/admin/live_chats")
 async def list_live_chats():
     docs = list(live_chat_sessions.find({}, {"_id": 0}))
     for d in docs:
         if not d.get("name"):
-            sid = d.get("session_id","")
+            sid = d.get("session_id", "")
             d["name"] = f"Student {sid[:4]}" if sid else "Student"
     order = {"queued": 0, "live": 1, "closed": 2}
-    docs.sort(key=lambda x: order.get(x.get("status","queued"), 9))
+    docs.sort(key=lambda x: order.get(x.get("status", "queued"), 9))
     return docs
 
 # ======================================================================================
 #                               PAGES & AUTH
 # ======================================================================================
+
+
 @app.get("/")
 def landing(request: Request):
     return templates.TemplateResponse("home.html", {"request": request})
+
 
 @app.get("/login", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
 # ---- Register (GET + POST) ----
+
+
 @app.get("/register", response_class=HTMLResponse)
 async def get_register(request: Request):
     return templates.TemplateResponse("register.html", {"request": request})
+
 
 @app.post("/register")
 async def post_register(
@@ -694,6 +743,7 @@ async def post_register(
 async def get_login(request: Request):
     return templates.TemplateResponse("login.html", {"request": request}) """
 
+
 @app.post("/login")
 async def post_login(
     request: Request,
@@ -708,7 +758,8 @@ async def post_login(
             "email": user["email"],
             "role": user["role"]
         }
-        print("[DEBUG] Session set for user:", request.session["user"])  # Debug log to confirm session set
+        # Debug log to confirm session set
+        print("[DEBUG] Session set for user:", request.session["user"])
         if role == "student":
             return RedirectResponse("/student_home", status_code=302)
         elif role == "staff":
@@ -733,7 +784,9 @@ def get_current_user(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return user
 
-#get mail
+# get mail
+
+
 def get_student_email_from_request(request: Request, fallback: str | None = None):
     # 1) if frontend sent the email, use that
     if fallback:
@@ -744,6 +797,7 @@ def get_student_email_from_request(request: Request, fallback: str | None = None
         return user["email"]
     return None
 
+
 def role_required(required_role: str):
     def role_dependency(user: dict = Depends(get_current_user)):
         if user.get("role") != required_role:
@@ -751,29 +805,36 @@ def role_required(required_role: str):
         return user
     return role_dependency
 
+
 @app.get("/student_home", response_class=HTMLResponse)
 async def student_dashboard(request: Request, user: dict = Depends(role_required("student"))):
     return templates.TemplateResponse("student_home.html", {"request": request})
+
 
 @app.get("/staff_home", response_class=HTMLResponse)
 async def staff_dashboard(request: Request, user: dict = Depends(role_required("staff"))):
     return templates.TemplateResponse("staff_home.html", {"request": request})
 
+
 @app.get("/admin_home", response_class=HTMLResponse)
 async def admin_dashboard(request: Request, user: dict = Depends(role_required("admin"))):
     return templates.TemplateResponse("admin_home.html", {"request": request})
+
 
 @app.get("/knowledge_base", response_class=HTMLResponse)
 async def knowledge_base(request: Request, user: dict = Depends(role_required("admin"))):
     return templates.TemplateResponse("knowledge_base.html", {"request": request})
 
+
 @app.get("/edit_profile", response_class=HTMLResponse)
 async def edit_profile(request: Request, user: dict = Depends(role_required("student"))):
     return templates.TemplateResponse("edit_profile.html", {"request": request})
 
+
 @app.get("/guest_home", response_class=HTMLResponse)
 async def guest_dashboard(request: Request, user: dict = Depends(role_required("guest"))):
     return templates.TemplateResponse("guest_home.html", {"request": request})
+
 
 @app.get("/chat", response_class=HTMLResponse)
 async def chat_page(request: Request, user: dict = Depends(get_current_user)):
@@ -812,13 +873,16 @@ async def book_appointment(
 
     try:
         inserted_id = save_appointment(appt, attachment)
-        print(f"[DEBUG] /book_appointment: inserted_id={inserted_id} attachment_present={attachment is not None}")
+        print(
+            f"[DEBUG] /book_appointment: inserted_id={inserted_id} attachment_present={attachment is not None}")
         return {"success": True, "appointment_id": str(inserted_id)}
     except Exception as e:
         print(f"[ERROR] /book_appointment exception: {e}")
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 # Cancel a ticket
+
+
 @app.post("/api/tickets/cancel/{ticket_id}")
 async def cancel_ticket(ticket_id: str):
     try:
@@ -833,6 +897,8 @@ async def cancel_ticket(ticket_id: str):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 # Cancel an appointment
+
+
 @app.post("/api/appointments/cancel/{appointment_id}")
 async def cancel_appointment(appointment_id: str):
     try:
@@ -847,12 +913,15 @@ async def cancel_appointment(appointment_id: str):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 # Reschedule an appointment
+
+
 @app.post("/api/appointments/reschedule/{appointment_id}")
 async def reschedule_appointment(appointment_id: str, new_date: str, new_time: str):
     try:
         result = db.appointments.update_one(
             {"_id": ObjectId(appointment_id)},
-            {"$set": {"date": new_date, "time": new_time, "status": "Pending Confirmation"}}
+            {"$set": {"date": new_date, "time": new_time,
+                      "status": "Pending Confirmation"}}
         )
         if result.modified_count == 1:
             return {"success": True, "message": "Appointment rescheduled successfully."}
@@ -861,12 +930,16 @@ async def reschedule_appointment(appointment_id: str, new_date: str, new_time: s
         return JSONResponse({"error": str(e)}, status_code=500)
 
 # Debug endpoint to inspect database state from the app's perspective
+
+
 @app.get("/api/debug")
 async def api_debug():
     try:
         cols = db.list_collection_names()
-        tickets_count = db.tickets.count_documents({}) if "tickets" in cols else 0
-        appts_count = db.appointments.count_documents({}) if "appointments" in cols else 0
+        tickets_count = db.tickets.count_documents(
+            {}) if "tickets" in cols else 0
+        appts_count = db.appointments.count_documents(
+            {}) if "appointments" in cols else 0
 
         latest_ticket = None
         if tickets_count > 0:
@@ -911,20 +984,25 @@ async def api_tickets(status: str | None = None):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 # Return list of appointments; if upcoming=true, only return date >= today
+
+
 @app.get("/api/appointments")
 async def api_appointments(upcoming: bool = False):
     try:
-        query = {"status": {"$ne": "Cancelled"}}  # Exclude cancelled appointments
+        # Exclude cancelled appointments
+        query = {"status": {"$ne": "Cancelled"}}
         if upcoming:
             today = date.today().isoformat()
             query["date"] = {"$gte": today}
-        docs = list(db.appointments.find(query).sort([("date", 1), ("time", 1)]))
+        docs = list(db.appointments.find(
+            query).sort([("date", 1), ("time", 1)]))
         out = []
         for d in docs:
             d["_id"] = str(d["_id"])
             d["status"] = d.get("status", "Pending")
             if d["status"] == "Confirmed":
-                appointment_date = datetime.strptime(d["date"], "%Y-%m-%d").date()
+                appointment_date = datetime.strptime(
+                    d["date"], "%Y-%m-%d").date()
                 days_left = (appointment_date - date.today()).days
                 d["countdown"] = f"In {days_left} days" if days_left > 0 else "Today"
             d["location_mode"] = d.get("location_mode", "Unknown")
@@ -966,17 +1044,19 @@ async def get_user_details(request: Request):
 
 # Adding an API endpoint to fetch stats & knowledge base
 
+
 @app.get("/api/stats")
 async def get_stats():
     try:
         knowledge_articles_count = db.knowledge_base.count_documents({})
-        departments_count = db.departments.count_documents({"status": "active"})
+        departments_count = db.departments.count_documents(
+            {"status": "active"})
         total_users_count = db.users.count_documents({})
         upcoming_appointments_count = db.appointments.count_documents({
             "status": {"$ne": "Cancelled"},
             "date": {"$gte": date.today().isoformat()}
         })
-        
+
         return {
             "knowledge_articles": knowledge_articles_count,
             "departments": departments_count,
@@ -991,6 +1071,7 @@ async def get_stats():
             "total_users": 0,
             "upcoming_appointments": 0
         }
+
 
 @app.get("/api/knowledge_base")
 async def get_knowledge_base():
@@ -1143,7 +1224,8 @@ async def chat_question(
     )
 
     if suggest_live_chat:
-        chips.append({"label": "Talk to an admin", "payload": {"type": "action", "action": "escalate"}})
+        chips.append({"label": "Talk to an admin", "payload": {
+                     "type": "action", "action": "escalate"}})
 
     resp = {
         "answer": answer,
@@ -1253,6 +1335,14 @@ async def answer_from_student_scope(request: Request, question: str, student_ema
     )
 
     texts = list(db.course_materials_text.find({ "course_id": matched_course["_id"] }))
+    if mats:
+        for m in mats:
+            title = m.get("title", "").lower()
+            desc = m.get("description", "").lower()
+            if title and title in qlow or desc and desc in qlow:
+                link_part = f"Link: {m['file_path']}" if m.get(
+                    "file_path") else ""
+                return f"{m.get('title','Material')}: {m.get('description','')} {link_part}".strip()
 
     if not texts:
         mats = list(db.course_materials.find({ "course_id": matched_course["_id"], "visible": True }))
@@ -1396,45 +1486,48 @@ def format_course_answer(c):
     )
 
 # Streaming version of chat_question
+
+
 @app.post("/chat_question_stream")
 async def chat_question_stream(question: str = Form(...)):
     from rag_pipeline import get_answer_stream
-    
+
     async def event_generator():
         # Collect full answer for followup generation
         full_answer = ""
-        
+
         # Stream the answer chunks
         for chunk in get_answer_stream(question):
             full_answer += chunk
             # Send each chunk as SSE (Server-Sent Events)
             yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-        
+
         # Generate followups after answer is complete
         chips, suggest_live_chat, fu_source = build_llm_style_followups(
             user_question=question,
             answer_text=full_answer or "",
             k=4
         )
-        
+
         if suggest_live_chat:
-            chips.append({"label": "Talk to an admin", "payload": {"type": "action", "action": "escalate"}})
-        
+            chips.append({"label": "Talk to an admin", "payload": {
+                         "type": "action", "action": "escalate"}})
+
         # Send followups
         followup_data = {
             "type": "followups",
             "suggest_live_chat": suggest_live_chat,
             "suggested_followups": chips
         }
-        
+
         if DEBUG_FOLLOWUPS:
             followup_data["followup_generator"] = fu_source
-        
+
         yield f"data: {json.dumps(followup_data)}\n\n"
-        
+
         # Send done signal
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
-    
+
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
@@ -1453,6 +1546,7 @@ async def chat_question_stream(question: str = Form(...)):
 class TicketAnalysisRequest(BaseModel):
     message: str
 
+
 class TicketCreateRequest(BaseModel):
     subject: str
     category: str
@@ -1460,6 +1554,7 @@ class TicketCreateRequest(BaseModel):
     description: str
     student_name: str = ""
     student_email: str = ""
+
 
 @app.post("/api/analyze_ticket")
 async def analyze_ticket_request(request: TicketAnalysisRequest, user: dict = Depends(get_current_user)):
@@ -1469,7 +1564,7 @@ async def analyze_ticket_request(request: TicketAnalysisRequest, user: dict = De
     try:
         from rag_pipeline import get_answer
         import re
-        
+
         # Use LLM to analyze the message
         analysis_prompt = f"""
         Analyze the following user message and extract ticket information.
@@ -1488,32 +1583,38 @@ async def analyze_ticket_request(request: TicketAnalysisRequest, user: dict = De
         PRIORITY: [priority]
         DESCRIPTION: [description]
         """
-        
+
         # Get LLM analysis
         answer, _ = get_answer(analysis_prompt)
-        
+
         # Parse the response
         subject_match = re.search(r'SUBJECT:\s*(.+)', answer)
         category_match = re.search(r'CATEGORY:\s*(.+)', answer)
         priority_match = re.search(r'PRIORITY:\s*(.+)', answer)
-        description_match = re.search(r'DESCRIPTION:\s*(.+)', answer, re.DOTALL)
-        
+        description_match = re.search(
+            r'DESCRIPTION:\s*(.+)', answer, re.DOTALL)
+
         # Extract values or use defaults
-        subject = subject_match.group(1).strip() if subject_match else "Support Request"
-        category = category_match.group(1).strip() if category_match else "Other"
-        priority = priority_match.group(1).strip() if priority_match else "Medium"
-        description = description_match.group(1).strip() if description_match else request.message
-        
+        subject = subject_match.group(1).strip(
+        ) if subject_match else "Support Request"
+        category = category_match.group(
+            1).strip() if category_match else "Other"
+        priority = priority_match.group(
+            1).strip() if priority_match else "Medium"
+        description = description_match.group(
+            1).strip() if description_match else request.message
+
         # Validate category
-        valid_categories = ["Technical Support", "Academic", "Financial", "Housing", "Registration", "Other"]
+        valid_categories = ["Technical Support", "Academic",
+                            "Financial", "Housing", "Registration", "Other"]
         if category not in valid_categories:
             category = "Other"
-        
+
         # Validate priority
         valid_priorities = ["Low", "Medium", "High"]
         if priority not in valid_priorities:
             priority = "Medium"
-        
+
         return {
             "subject": subject[:100],  # Limit to 100 chars
             "category": category,
@@ -1540,7 +1641,7 @@ async def create_ticket(ticket: TicketCreateRequest, user: dict = Depends(get_cu
         # Get student information from session
         student_email = user.get("email", "")
         student_name = user.get("full_name", "")
-        
+
         # Create ticket document
         ticket_doc = {
             "student_email": student_email,
@@ -1555,10 +1656,10 @@ async def create_ticket(ticket: TicketCreateRequest, user: dict = Depends(get_cu
             "assigned_staff": None,
             "assigned_to_name": None
         }
-        
+
         # Insert into database
         result = db.tickets.insert_one(ticket_doc)
-        
+
         return {
             "success": True,
             "ticket_id": str(result.inserted_id),
@@ -1575,6 +1676,7 @@ async def create_ticket(ticket: TicketCreateRequest, user: dict = Depends(get_cu
 async def login_with_google(request: Request):
     redirect_uri = "http://localhost:8000/auth/google/callback"
     return await oauth.google.authorize_redirect(request, redirect_uri)
+
 
 @app.get("/auth/google/callback")
 async def auth_google_callback(request: Request):
@@ -1607,19 +1709,26 @@ async def auth_google_callback(request: Request):
     return RedirectResponse(url="/login")
 
 # Ensure session is completely cleared on logout
+
+
 @app.get("/logout")
 async def logout(request: Request):
     request.session.clear()  # Clear the session completely
-    print("[DEBUG] Session after clearing:", request.session)  # Debug log to confirm session is empty
+    # Debug log to confirm session is empty
+    print("[DEBUG] Session after clearing:", request.session)
     return RedirectResponse(url="/login")
 
 # API endpoint to fetch courses by term
+
+
 @app.get("/api/courses/{term}")
 def get_courses(term: str):
     courses = list(db.courses.find({"term": term}))
     return convert_objectid_to_str(courses)
 
 # Helper function to convert ObjectId to string
+
+
 def convert_objectid_to_str(doc):
     if isinstance(doc, list):
         return [convert_objectid_to_str(d) for d in doc]
@@ -1630,12 +1739,16 @@ def convert_objectid_to_str(doc):
     return doc
 
 # Define a Pydantic model for course registration
+
+
 class CourseRegistration(BaseModel):
     student_email: str
     course_id: str
     term: str
 
 # Updated API endpoint to register a student for a course
+
+
 @app.post("/api/register_course")
 def register_course(registration: CourseRegistration):
     try:
@@ -1648,13 +1761,15 @@ def register_course(registration: CourseRegistration):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
-from bson import ObjectId
 
 # API endpoint to fetch registered courses for a student
+
+
 @app.get("/api/registered_courses/{student_email}")
 def get_registered_courses(student_email: str):
     # 1) get all registrations for this student
-    registrations = list(db.registrations.find({"student_email": student_email}))
+    registrations = list(db.registrations.find(
+        {"student_email": student_email}))
 
     if not registrations:
         return []
@@ -1715,6 +1830,8 @@ def get_registered_courses(student_email: str):
     return registered_courses
 
 # API endpoint to fetch student data
+
+
 @app.get("/api/student/{email}")
 def get_student(email: str):
     student = db.users.find_one({"email": email})
@@ -1724,6 +1841,8 @@ def get_student(email: str):
     return student
 
 # Define a Pydantic model for student data
+
+
 class StudentUpdate(BaseModel):
     first_name: str
     last_name: str
@@ -1734,6 +1853,7 @@ class StudentUpdate(BaseModel):
     phone_number: str
     address: str
 
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("update_student")
@@ -1742,6 +1862,8 @@ logger = logging.getLogger("update_student")
 logger.info("Test log: Logging is working.")
 
 # Updated API endpoint to update student data with full_name auto-generation
+
+
 @app.put("/api/student/{email}")
 def update_student(email: str, student_data: StudentUpdate):
     try:
@@ -1755,10 +1877,12 @@ def update_student(email: str, student_data: StudentUpdate):
         update_data = student_data.dict()
         update_data["full_name"] = full_name
 
-        result = db.users.update_one({"email": email}, {"$set": update_data}, upsert=True)
+        result = db.users.update_one(
+            {"email": email}, {"$set": update_data}, upsert=True)
         if result.modified_count == 0 and not result.upserted_id:
             logger.error("Failed to update student data in the database.")
-            raise HTTPException(status_code=400, detail="Failed to update student data")
+            raise HTTPException(
+                status_code=400, detail="Failed to update student data")
 
         logger.info("Student data updated successfully.")
         return {"message": "Student data updated successfully"}
@@ -1767,22 +1891,28 @@ def update_student(email: str, student_data: StudentUpdate):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 # API endpoint to fetch registered classes for a student
+
+
 @app.get("/api/student/{email}/registered_classes")
 def get_registered_classes(email: str):
     registrations = list(db.registrations.find({"student_email": email}))
     registered_classes = []
 
     for registration in registrations:
-        course = db.courses.find_one({"_id": ObjectId(registration["course_id"])})
+        course = db.courses.find_one(
+            {"_id": ObjectId(registration["course_id"])})
         if course:
             course["_id"] = str(course["_id"])  # Convert ObjectId to string
             registration["course_details"] = course
-        registration["_id"] = str(registration["_id"])  # Convert ObjectId to string
+        # Convert ObjectId to string
+        registration["_id"] = str(registration["_id"])
         registered_classes.append(registration)
 
     return registered_classes
 
 # API endpoint to get all staff members (for admin to assign tickets)
+
+
 @app.get("/api/staff")
 def get_all_staff():
     try:
@@ -1795,6 +1925,8 @@ def get_all_staff():
         raise HTTPException(status_code=500, detail=str(e))
 
 # API endpoint to get staff by department
+
+
 @app.get("/api/staff/department/{department}")
 def get_staff_by_department(department: str):
     try:
@@ -1807,16 +1939,19 @@ def get_staff_by_department(department: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 # API endpoint to assign ticket to staff
+
+
 @app.put("/api/tickets/{ticket_id}/assign")
 def assign_ticket(ticket_id: str, staff_email: str):
     try:
         from bson import ObjectId
-        
+
         # Verify staff exists
         staff = db.users.find_one({"email": staff_email, "role": "staff"})
         if not staff:
-            raise HTTPException(status_code=404, detail="Staff member not found")
-        
+            raise HTTPException(
+                status_code=404, detail="Staff member not found")
+
         # Update ticket
         result = db.tickets.update_one(
             {"_id": ObjectId(ticket_id)},
@@ -1829,48 +1964,51 @@ def assign_ticket(ticket_id: str, staff_email: str):
                 }
             }
         )
-        
+
         if result.modified_count == 0:
             raise HTTPException(status_code=404, detail="Ticket not found")
-        
+
         return {"message": "Ticket assigned successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 # API endpoint to update ticket (status and/or assigned staff)
+
+
 @app.put("/api/tickets/{ticket_id}")
 async def update_ticket(ticket_id: str, request: Request):
     try:
         from bson import ObjectId
-        
+
         data = await request.json()
         status = data.get("status")
         assigned_staff = data.get("assigned_staff")
-        
+
         update_fields = {
             "last_updated": datetime.now().isoformat()
         }
-        
+
         if status:
             update_fields["status"] = status
-        
+
         if assigned_staff and assigned_staff != "":
             # Verify staff exists
-            staff = db.users.find_one({"email": assigned_staff, "role": "staff"})
+            staff = db.users.find_one(
+                {"email": assigned_staff, "role": "staff"})
             if staff:
                 update_fields["assigned_staff"] = assigned_staff
                 update_fields["assigned_to_name"] = staff.get("full_name")
                 update_fields["assigned_at"] = datetime.now().isoformat()
-        
+
         # Update ticket
         result = db.tickets.update_one(
             {"_id": ObjectId(ticket_id)},
             {"$set": update_fields}
         )
-        
+
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Ticket not found")
-        
+
         return {"message": "Ticket updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1887,13 +2025,15 @@ async def get_departments(status: str | None = None):
             query["status"] = status
         else:
             query["status"] = "active"  # Default to active departments
-        
+
         departments = list(db.departments.find(query).sort("name", 1))
         return convert_objectid_to_str(departments)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 # Get all students for user management
+
+
 @app.get("/api/students")
 async def get_all_students():
     try:
@@ -1906,6 +2046,8 @@ async def get_all_students():
         raise HTTPException(status_code=500, detail=str(e))
 
 # Get single department by ID
+
+
 @app.get("/api/departments/{department_id}")
 async def get_department(department_id: str):
     try:
@@ -1917,40 +2059,48 @@ async def get_department(department_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Create new department
+
+
 @app.post("/api/departments")
 async def create_department(request: Request):
     try:
         data = await request.json()
-        
+
         # Check if department_id already exists
-        existing = db.departments.find_one({"department_id": data.get("department_id")})
+        existing = db.departments.find_one(
+            {"department_id": data.get("department_id")})
         if existing:
-            raise HTTPException(status_code=400, detail="Department ID already exists")
-        
+            raise HTTPException(
+                status_code=400, detail="Department ID already exists")
+
         result = db.departments.insert_one(data)
         return {"message": "Department created successfully", "id": str(result.inserted_id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 # Update department
+
+
 @app.put("/api/departments/{department_id}")
 async def update_department(department_id: str, request: Request):
     try:
         data = await request.json()
-        
+
         result = db.departments.update_one(
             {"department_id": department_id},
             {"$set": data}
         )
-        
+
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Department not found")
-        
+
         return {"message": "Department updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 # Delete department (soft delete by setting status to inactive)
+
+
 @app.delete("/api/departments/{department_id}")
 async def delete_department(department_id: str):
     try:
@@ -1958,13 +2108,14 @@ async def delete_department(department_id: str):
             {"department_id": department_id},
             {"$set": {"status": "inactive"}}
         )
-        
+
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Department not found")
-        
+
         return {"message": "Department deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/materials/all")
 async def get_all_materials(request: Request):
@@ -1975,7 +2126,8 @@ async def get_all_materials(request: Request):
     mats = list(db.course_materials.find({}).sort("uploaded_at", -1))
     # get titles for each course
     course_ids = list({m["course_id"] for m in mats})
-    courses = {c["_id"]: c for c in db.courses.find({"_id": {"$in": course_ids}})}
+    courses = {c["_id"]: c for c in db.courses.find(
+        {"_id": {"$in": course_ids}})}
 
     out = []
     for m in mats:
@@ -1987,13 +2139,9 @@ async def get_all_materials(request: Request):
         out.append(m)
     return out
 
-from bson import ObjectId
-
-
-from bson import ObjectId
-from fastapi import HTTPException, Request
 
 # --- 1. return ALL courses (used as fallback by staff page) ---
+
 @app.get("/api/courses")
 def get_all_courses():
     courses = list(db.courses.find({}))
@@ -2009,8 +2157,7 @@ def get_all_courses():
 
 
 # --- 2. return ONLY this staff member's courses ---
-from bson import ObjectId
-from fastapi import HTTPException, Request
+
 
 @app.get("/api/courses/my")
 def get_my_courses(request: Request):
@@ -2109,6 +2256,7 @@ from bson import ObjectId
 
 # staff creates material
 import re
+# staff creates material
 
 @app.post("/api/materials")
 async def create_course_material(
@@ -2135,6 +2283,19 @@ async def create_course_material(
         with open(abs_path, "wb") as f:
             f.write(await file.read())
         saved_filename = cleaned  # <-- store only this
+    saved_path = None
+    file_type = None
+
+    # if staff uploaded an actual file
+    if file:
+        contents = await file.read()
+        saved_path = f"uploads/{file.filename}"
+        with open(saved_path, "wb") as f:
+            f.write(contents)
+        file_type = file.content_type or "application/octet-stream"
+    elif external_url:
+        saved_path = external_url
+        file_type = "link"
 
     doc = {
         "course_id": course["_id"],
@@ -2172,8 +2333,6 @@ async def create_course_material(
 
 
 
-from fastapi import Request
-
 @app.get("/api/debug/courses")
 def debug_courses(request: Request):
     user = request.session.get("user")
@@ -2210,5 +2369,3 @@ async def get_materials_by_course(course_id: str):
         m["course_id"] = str(m["course_id"])
         out.append(m)
     return out
-
-

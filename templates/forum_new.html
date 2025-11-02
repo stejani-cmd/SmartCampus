@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}New Discussion | SmartCampus{% endblock %}
+
+{% block extra_css %}
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          tamuccBlue: '#003366',
+          tamuccTeal: '#007A78',
+          tamuccLight: '#00AEEF',
+        }
+      }
+    }
+  }
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-[calc(100vh-60px)] bg-gradient-to-br from-tamuccBlue via-tamuccTeal to-tamuccLight flex justify-center py-6 px-4">
+  <div class="w-full max-w-5xl bg-white/85 backdrop-blur-md rounded-2xl shadow-2xl border border-white/30 flex flex-col">
+    <!-- header -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-white/40">
+      <div>
+        <p class="text-xs text-gray-500 mb-1">Community forum</p>
+        <h1 class="text-lg font-semibold text-tamuccBlue">Start a new discussion</h1>
+        <p class="text-xs text-gray-500">Describe the issue / notice clearly so others can reply.</p>
+      </div>
+      <a href="/forum" class="text-xs text-tamuccBlue hover:underline">← Back to forum</a>
+    </div>
+
+    <!-- body -->
+    <div class="grid grid-cols-12 gap-6 p-6">
+      <!-- form -->
+      <div class="col-span-12 md:col-span-8">
+        <form method="post" action="/forum/new" class="space-y-4" id="new-forum-form">
+          <!-- title -->
+          <div>
+            <label class="block text-sm font-medium text-tamuccBlue mb-1">Title <span class="text-red-500">*</span></label>
+            <input type="text" name="title" required
+                   placeholder="e.g. Is the library open on Sunday during exams?"
+                   class="w-full bg-white/80 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tamuccTeal/70">
+          </div>
+
+          <!-- category + quick chips -->
+          <div>
+            <label class="block text-sm font-medium text-tamuccBlue mb-1">Category</label>
+            <select name="category_slug" id="category-select"
+                    class="w-full bg-white/80 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tamuccTeal/70">
+              {% if categories %}
+                {% for c in categories %}
+                  <option value="{{ c.slug }}">{{ c.name }}</option>
+                {% endfor %}
+              {% else %}
+                <option value="general">General</option>
+              {% endif %}
+            </select>
+            <p class="text-[11px] text-gray-400 mt-1">Tip: pick IT support for Wi-Fi / LMS issues, Hostel for mess/hostel related questions.</p>
+
+            <!-- quick buttons -->
+            <div class="flex flex-wrap gap-2 mt-2">
+              <button type="button" data-cat="it-support"
+                      class="inline-flex items-center px-3 py-1 rounded-full bg-tamuccTeal/10 text-tamuccTeal text-xs hover:bg-tamuccTeal/20">
+                IT support
+              </button>
+              <button type="button" data-cat="hostel"
+                      class="inline-flex items-center px-3 py-1 rounded-full bg-tamuccTeal/10 text-tamuccTeal text-xs hover:bg-tamuccTeal/20">
+                Hostel / mess
+              </button>
+              <button type="button" data-cat="general"
+                      class="inline-flex items-center px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs hover:bg-gray-200">
+                General
+              </button>
+            </div>
+          </div>
+
+          <!-- tags -->
+          <div>
+            <label class="block text-sm font-medium text-tamuccBlue mb-1">
+              Tags <span class="text-gray-400 text-[11px]">(comma separated)</span>
+            </label>
+            <input type="text" name="tags"
+                   placeholder="wifi, hostel, exam, campus"
+                   class="w-full bg-white/80 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tamuccTeal/70">
+          </div>
+
+          <!-- body -->
+          <div>
+            <label class="block text-sm font-medium text-tamuccBlue mb-1">Description</label>
+            <textarea name="body" rows="6" id="body-textarea"
+                      placeholder="Explain the doubt / notice / problem. Add time, place, and who it affects..."
+                      class="w-full bg-white/80 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tamuccTeal/70"></textarea>
+            <div class="flex justify-between items-center mt-1">
+              <p class="text-[11px] text-gray-400">Be specific so another student can answer in 1 reply.</p>
+              <p class="text-[11px] text-gray-400"><span id="body-count">0</span> chars</p>
+            </div>
+          </div>
+
+          <!-- anonymous -->
+          <div class="flex items-center gap-2 bg-white/50 border border-gray-200 rounded-lg px-3 py-2">
+            <input id="anon-toggle" name="anonymous" type="checkbox" value="1"
+                   class="h-4 w-4 text-tamuccTeal border-gray-300 rounded focus:ring-tamuccTeal/60">
+            <label for="anon-toggle" class="text-sm text-gray-700">
+              Post as anonymous
+              <span class="block text-[11px] text-gray-400">Your name will be hidden in the forum list, but we can still track for abuse.</span>
+            </label>
+          </div>
+
+          <!-- submit -->
+          <div class="flex items-center gap-3">
+            <button type="submit"
+                    class="bg-tamuccTeal text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-tamuccLight transition">
+              Publish
+            </button>
+            <a href="/forum" class="text-xs text-gray-500 hover:text-gray-700">Cancel</a>
+          </div>
+        </form>
+      </div>
+
+      <!-- side info -->
+      <div class="col-span-12 md:col-span-4 space-y-3">
+        <div class="bg-white/65 border border-gray-200 rounded-xl p-4">
+          <h2 class="text-sm font-semibold text-tamuccBlue mb-2">Good post checklist</h2>
+          <ul class="text-xs text-gray-600 space-y-1.5">
+            <li>• Write a clear, searchable title</li>
+            <li>• Choose the right category</li>
+            <li>• Add location / time if it’s a campus notice</li>
+            <li>• Add 1-3 tags (wifi, hostel, exam)</li>
+          </ul>
+        </div>
+        <div class="bg-white/50 border border-gray-200 rounded-xl p-4">
+          <h2 class="text-sm font-semibold text-tamuccBlue mb-2">Why this matters</h2>
+          <p class="text-xs text-gray-600">
+            Students will see this first in the community feed. Clear posts get faster replies.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // fill category from querystring: /forum/new?cat=hostel
+  (function() {
+    const params = new URLSearchParams(window.location.search);
+    const cat = params.get("cat");
+    const select = document.getElementById("category-select");
+    if (cat && select) {
+      for (const opt of select.options) {
+        if (opt.value === cat) {
+          select.value = cat;
+          break;
+        }
+      }
+    }
+  })();
+
+  // quick chips
+  document.querySelectorAll("[data-cat]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const val = btn.getAttribute("data-cat");
+      const sel = document.getElementById("category-select");
+      if (sel) sel.value = val;
+    });
+  });
+
+  // live char counter
+  const bodyTa = document.getElementById("body-textarea");
+  const countEl = document.getElementById("body-count");
+  if (bodyTa && countEl) {
+    bodyTa.addEventListener("input", () => {
+      countEl.textContent = bodyTa.value.length;
+    });
+  }
+</script>
+{% endblock %}
