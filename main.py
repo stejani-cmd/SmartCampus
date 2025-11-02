@@ -23,7 +23,7 @@ from pydantic import BaseModel, ValidationError
 import logging
 from app.utils import get_current_user
 
-from app.routers import auth, pages
+from app.routers import auth, pages, forum
 from app.core.config import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -51,6 +51,7 @@ app.add_middleware(
 # routers
 app.include_router(pages.router)
 app.include_router(auth.router)
+app.include_router(forum.router)
 
 # Configure OAuth for Google
 oauth = OAuth()
