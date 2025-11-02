@@ -1,0 +1,3 @@
+import secrets
+print(secrets.token_hex(32))
+5ab64f2fa5c97972a2ed0583f07d1d478c6887f6bc9cdbae2b42b25c1ff716c5

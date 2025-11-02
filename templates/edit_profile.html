@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SmartCampus | Edit Profile</title>
+<title>SmartAssist | Edit Profile</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
@@ -376,7 +376,7 @@
 
 <!-- Navbar -->
 <nav>
-  <h1>SmartCampus</h1>
+  <h1>SmartAssist</h1>
   <div class="nav-links">
     <a href="/student_home">Dashboard</a>
     <a href="/logout">Logout</a>
@@ -616,6 +616,33 @@
   document.addEventListener('DOMContentLoaded', () => {
     fetchStudentData().then(() => {
       fetchRegisteredClasses();
+      classes.forEach(cls => {
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td>${cls.course_details.title || 'N/A'}</td>
+    ...
+  `;
+  tableBody.appendChild(row);
+
+  if (cls.materials && cls.materials.length > 0) {
+    const mrow = document.createElement('tr');
+    mrow.innerHTML = `
+      <td colspan="8">
+        <strong>Materials:</strong>
+        <ul>
+          ${cls.materials.map(m => `
+            <li>
+              ${m.title}
+              ${m.file_path ? ` - <a href="${m.file_path}" target="_blank">Open</a>` : ''}
+            </li>
+          `).join('')}
+        </ul>
+      </td>
+    `;
+    tableBody.appendChild(mrow);
+  }
+});
+
     });
   });
 </script>
