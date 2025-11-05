@@ -646,7 +646,7 @@
     h2 {
       font-size: 1.5rem;
       margin-bottom: 1rem;
-      color: #fff;
+      color: #000000;
     }
 
     table {
@@ -725,6 +725,10 @@
     .btn:hover {
       background: #00A99D;
     }
+
+    .welcome{
+      color: white;
+    }
   </style>
 </head>
 
@@ -772,7 +776,7 @@
       <!-- Hero Section -->
       <div class="hero">
         <div>
-          <h2 class="text-2xl font-semibold text-gray-800">
+          <h2 class="welcome text-2xl font-semibold text-gray-800 ">
             Welcome, {{user.full_name}} 👋
           </h2>
           <p>Your campus services dashboard. Access SmartCampus features and track your requests in real-time.</p>
@@ -856,12 +860,12 @@
           <h3>Raise Ticket</h3>
           <p>Submit and track service requests with real-time updates.</p>
         </div>
-        <div class="card" id="book-appointment-card1">
-          <i class="fa-solid fa-calendar-check"></i>
-          <!-- <h3>Assignment Checker</h3> -->
-          <a href="/assignment-checker">Assignment Checker</a>
-          <!-- <p>Schedule meetings with advisors, professors, or offices conveniently.</p> -->
-        </div>
+        <div class="card" onclick="window.location.href='/assignment-checker'">
+  <i class="fa-solid fa-calendar-check"></i>
+  <h3>Assignment Checker</h3>
+  <p>Check your assignments and get instant feedback.</p>
+</div>
+
 
         <div class="card" onclick="alert('Track Requests')">
           <i class="fa-solid fa-list-check"></i>
@@ -877,7 +881,7 @@
 
       <!-- ================= MY TICKETS SECTION ================= -->
       <section id="my-tickets">
-        <h2>My Tickets</h2>
+        <h2 class="ticket-color">My Tickets</h2>
         <table>
           <thead>
             <tr>
@@ -1449,27 +1453,43 @@
 
     // Load Tickets function
     async function loadTickets() {
-      try {
-        const response = await fetch('/api/tickets');
-        const data = await response.json();
-        const ticketList = document.getElementById('ticket-list');
-        ticketList.innerHTML = '';
+    const tbody = document.getElementById('ticket-list');
+    if (!tbody) return;
 
-        data.tickets.forEach(ticket => {
-          const row = document.createElement('tr');
-          row.innerHTML = `
-        <td>${ticket._id}</td>
-        <td>${ticket.subject}</td>
-        <td>${ticket.category}</td>
-        <td>${ticket.priority}</td>
-        <td>${ticket.status}</td>
-      `;
-          ticketList.appendChild(row);
-        });
-      } catch (error) {
-        console.error('Error loading tickets:', error);
+    // show loading
+    tbody.innerHTML = `<tr><td colspan="5">Loading...</td></tr>`;
+
+    try {
+      const res = await fetch('/api/tickets');   // backend returns an array
+      const data = await res.json();
+
+      // normalize: backend → array; old code → {tickets: [...]}
+      const tickets = Array.isArray(data) ? data : (data.tickets || []);
+
+      if (!tickets.length) {
+        tbody.innerHTML = `<tr><td colspan="5">No tickets found.</td></tr>`;
+        return;
       }
+
+      tbody.innerHTML = tickets.map(t => `
+        <tr>
+          <td>${t._id || '-'}</td>
+          <td>${t.subject || '-'}</td>
+          <td>${t.category || '-'}</td>
+          <td>${t.priority || '-'}</td>
+          <td>${t.status || '-'}</td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      console.error('Error loading tickets:', err);
+      tbody.innerHTML = `<tr><td colspan="5">Error loading tickets.</td></tr>`;
     }
+  }
+
+  // keep this
+  window.onload = () => {
+    loadTickets();
+  };
 
     document.addEventListener('DOMContentLoaded', async () => {
       try {
